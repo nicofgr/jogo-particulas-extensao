@@ -1,0 +1,70 @@
+#include <GL/glut.h>
+
+float x1_ = -0.8f, y1_ = -0.6f;
+float x2_ = 0.6f,  y2_ = 0.9f;
+
+void init(void);
+void reshape(void);
+void display(void);
+void keyboard(unsigned char key, int x, int y);
+
+void drawSegmentByLineEquation(float x1, float y1, float x2, float y2) {
+  float dx = (x2 - x1);
+  float dy = (y2 - y1);
+  float m = dy / dx;
+  float y = y1;
+
+  glPointSize(3.0f);
+  glBegin(GL_POINTS);
+    float step = dx / 100.0f;
+    for (float x = x1; x <= x2; x += step) {
+      y += m / 100.0f;
+      glVertex2f(x, y);      
+    }
+  glEnd();
+}
+
+void init() {
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+}
+
+void display() {
+  glClear(GL_COLOR_BUFFER_BIT);
+  glColor3f(1.0f, 1.0f, 1.0f);
+  drawSegmentByLineEquation(x1_, y1_, x2_, y2_);
+  glutSwapBuffers();
+}
+
+void keyboard(unsigned char key, int x, int y) {
+  switch (key) {
+    case 'w':
+      y2_ += 0.01f;
+      break;
+    case 's': 
+      y2_ -= 0.01f;
+      break;
+    case 'a': 
+      x2_ -= 0.01f;
+      break;
+    case 'd':
+      x2_ += 0.01f;
+      break;
+    case 27:
+       exit(0);
+    }
+    glutPostRedisplay();
+}
+
+int main(int argc, char** argv) {
+  glutInit(&argc, argv);
+  glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB);
+  glutInitWindowSize(500, 500);
+  glutCreateWindow("OpenGL 2.0 - Line Equation");
+  glutDisplayFunc(display);
+  glutKeyboardFunc(keyboard);
+  init();
+  glutMainLoop();
+  return 0;
+}
