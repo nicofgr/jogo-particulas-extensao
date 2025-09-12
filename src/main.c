@@ -50,8 +50,9 @@ void drawSegmentByLineEquation(float x1, float y1, float x2, float y2, unsigned 
     a = 1;
     b = 0;
   }
-  if (x1 > x2){   // Drawing from right to left
+  if ((x1 > x2)){   // Drawing from right to left
     swapFloat(&x1, &x2);
+    swapFloat(&y1, &y2);
   }
   float dx = (x2 - x1);
   float dy = (y2 - y1);
@@ -137,6 +138,56 @@ void init() {
   glEnableVertexAttribArray(0);
 }
 
+typedef struct Vertex{
+  float x;
+  float y;
+  float z;
+}Vertex;
+
+typedef struct VertexArray{
+  Vertex* verts;
+  unsigned int size;
+}VertexArray;
+
+void vertexArray_Push(VertexArray* verArray, float x, float y, float z){
+  if(verArray->size == 0){
+    verArray->verts = (Vertex*)malloc(sizeof(Vertex));
+  }else{
+    verArray->verts = (Vertex*)realloc(verArray->verts, sizeof(Vertex)*(verArray->size+1));
+  }
+  verArray->verts[verArray->size].x = x;
+  verArray->verts[verArray->size].y = y;
+  verArray->verts[verArray->size].z = z;
+  verArray->size++;
+}
+
+void drawOBJ(const char* filename){
+  FILE* fptr = fopen(filename, "r");
+  char data[50];
+  
+  VertexArray verArray = {NULL, 0};
+  char type;
+  float x, y, z;
+  fscanf(fptr, "%c", &type);
+  while(type == 'v'){
+    fscanf(fptr, "%f %f %f\n", &x, &y, &z);
+    vertexArray_Push(&verArray, x/5, y/5, z/5);
+    fscanf(fptr, "%c", &type);
+  }
+
+  int v1, v2, v3;
+  while(type == 'f'){
+    fscanf(fptr, "%d %d %d\n", &v1, &v2, &v3);
+    drawSegmentByLineEquation(verArray.verts[v1-1].x, verArray.verts[v1-1].y, verArray.verts[v2-1].x, verArray.verts[v2-1].y, 20);
+    drawSegmentByLineEquation(verArray.verts[v2-1].x, verArray.verts[v2-1].y, verArray.verts[v3-1].x, verArray.verts[v3-1].y, 20);
+    drawSegmentByLineEquation(verArray.verts[v3-1].x, verArray.verts[v3-1].y, verArray.verts[v1-1].x, verArray.verts[v1-1].y, 20);
+    fscanf(fptr, "%c", &type);
+  }
+
+  free(verArray.verts);
+  fclose(fptr);
+}
+
 int main(int argc, char** argv) {
   if(SDL_Init(SDL_INIT_EVERYTHING) != 0){
     printf("SDL2 could not initialize video subsystem\n");
@@ -176,12 +227,8 @@ int main(int argc, char** argv) {
         quit = 1;
       }
     }
+    drawOBJ("test.obj");
     
-    drawSegmentByLineEquation(0.0f, 0.5f, 0.5f, -0.5f, 20);
-    //drawSegmentByLineEquation(-0.5f, 0.0f, 0.5f, 0.0f, 100);
-    drawSegmentByLineEquation(0.5f, -0.5f, -0.5f, -0.5f, 100);  // Horiz Line
-    drawSegmentByLineEquation(0.0f, -0.5f, 0.0f, 0.5f, 10);  // Vertical Line
-    drawSegmentByLineEquation(-0.5f, -0.5f, 0.0f, 0.5f, 20);
     SDL_GL_SwapWindow(glWindow);
   }
   SDL_GL_DeleteContext(glContext);
