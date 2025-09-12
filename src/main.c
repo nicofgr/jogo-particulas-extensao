@@ -15,7 +15,7 @@ const char *vertexShaderSource = "#version 330 core\n"
     "void main()\n"
     "{\n"
     "   gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);\n"
-    "   gl_PointSize = 16.0;\n"
+    "   gl_PointSize = 3.0;\n"
     "}\0";
 
 const char *fragmentShaderSource = "#version 330 core\n"
@@ -25,11 +25,6 @@ const char *fragmentShaderSource = "#version 330 core\n"
     "   FragColor = vec4(1.0f, 0.5f, 0.2f, 1.0f);\n"
     "}\0";
 
-float vertices[] = {
-    -0.5f, -0.5f, 0.0f,
-     0.5f, -0.5f, 0.0f,
-     0.0f,  0.5f, 0.0f
-};
 unsigned int vertexShader;
 unsigned int fragmentShader;
 unsigned int shaderProgram;
@@ -40,20 +35,18 @@ void init(void);
 void reshape(void);
 void display(void);
 
-void drawSegmentByLineEquation(float x1, float y1, float x2, float y2){
+void drawSegmentByLineEquation(float x1, float y1, float x2, float y2, unsigned int resolution){
   float dx = (x2 - x1);
   float dy = (y2 - y1);
   float m = dy / dx;
   float y = y1;
-
-  int resolution = 200;
 
   float verts[(resolution*3)+3];
 
   float step = dx / resolution;
   int i = 0;
   for (float x = x1; x <= x2; x += step) {
-    y += m / resolution;
+    y += m*step;
     verts[i*3] = x;
     verts[i*3 + 1] = y;
     verts[i*3 + 2] = 0.0f;
@@ -73,17 +66,19 @@ void drawSegmentByLineEquation(float x1, float y1, float x2, float y2){
 
 
 void init() {
+  glEnable(GL_PROGRAM_POINT_SIZE);
 
   int success;
   char infoLog[512];
   vertexShader = glCreateShader(GL_VERTEX_SHADER);
-  glDeleteShader(vertexShader);
   glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
   glCompileShader(vertexShader);
   glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
   if(!success){
     glGetShaderInfoLog(vertexShader, 512, NULL, infoLog);
-    printf("ERROR::SHADER::VERTEX::COMPILATION_FAILED\n %s", infoLog);
+    printf("ERROR::SHADER::VERTEX::COMPILATION_FAILED\n %s\n", infoLog);
+    printf("%d\n", glGetError());
+    exit(1);
   }
   
   fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
@@ -92,7 +87,8 @@ void init() {
   glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success);
   if(!success){
     glGetShaderInfoLog(fragmentShader, 512, NULL, infoLog);
-    printf("ERROR::SHADER::VERTEX::COMPILATION_FAILED\n %s", infoLog);
+    printf("ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n %s\n", infoLog);
+    exit(1);
   }
 
   shaderProgram = glCreateProgram();
@@ -102,7 +98,8 @@ void init() {
   glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success);
   if(!success) {
     glGetProgramInfoLog(shaderProgram, 512, NULL, infoLog);
-    printf("ERROR::SHADER::VERTEX::COMPILATION_FAILED\n %s", infoLog);
+    printf("ERROR::SHADER::PROGRAM::COMPILATION_FAILED\n %s\n", infoLog);
+    exit(1);
   }
   glDeleteShader(vertexShader);
   glDeleteShader(fragmentShader);
@@ -113,9 +110,10 @@ void init() {
 
 
   glBindVertexArray(VAO);
-
+  /**
   glBindBuffer(GL_ARRAY_BUFFER, VBO);
   glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+  **/
 
   glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
   glEnableVertexAttribArray(0);
@@ -132,7 +130,7 @@ int main(int argc, char** argv) {
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
   SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
   SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
-  glWindow = SDL_CreateWindow("Window", 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_OPENGL);
+  glWindow = SDL_CreateWindow("OpenGL 3.3", 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_OPENGL);
   if(glWindow == NULL){
     printf("Error creating window\n");
     exit(1);
@@ -161,7 +159,10 @@ int main(int argc, char** argv) {
       }
     }
     
-    drawSegmentByLineEquation(-0.5f, -0.1f, 0.5f, 0.1f);
+    drawSegmentByLineEquation(0.0f, 0.5f, 0.5f, -0.5f, 100);
+    drawSegmentByLineEquation(-0.5f, -0.5f, 0.5f, -0.5f, 100);
+    //drawSegmentByLineEquation(0.5f, -0.5f, -0.5f, -0.5f, 100);  // NEED TO FIX
+    drawSegmentByLineEquation(-0.5f, -0.5f, 0.0f, 0.5f, 100);
     SDL_GL_SwapWindow(glWindow);
   }
   SDL_GL_DeleteContext(glContext);
