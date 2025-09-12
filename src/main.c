@@ -35,7 +35,13 @@ void init(void);
 void reshape(void);
 void display(void);
 
+
 void drawSegmentByLineEquation(float x1, float y1, float x2, float y2, unsigned int resolution){
+  if (x1 > x2){
+    float aux = x1;
+    x1 = x2;
+    x2 = aux;
+  }
   float dx = (x2 - x1);
   float dy = (y2 - y1);
   float m = dy / dx;
@@ -159,10 +165,10 @@ int main(int argc, char** argv) {
       }
     }
     
-    drawSegmentByLineEquation(0.0f, 0.5f, 0.5f, -0.5f, 100);
-    drawSegmentByLineEquation(-0.5f, -0.5f, 0.5f, -0.5f, 100);
-    //drawSegmentByLineEquation(0.5f, -0.5f, -0.5f, -0.5f, 100);  // NEED TO FIX
-    drawSegmentByLineEquation(-0.5f, -0.5f, 0.0f, 0.5f, 100);
+    //drawSegmentByLineEquation(0.0f, 0.5f, 0.5f, -0.5f, 100);
+    drawSegmentByLineEquation(-0.5f, 0.5f, 0.5f, 0.5f, 10);
+    drawSegmentByLineEquation(0.5f, -0.5f, -0.5f, -0.5f, 10);  // NEED TO FIX
+    //drawSegmentByLineEquation(-0.5f, -0.5f, 0.0f, 0.5f, 100);
     SDL_GL_SwapWindow(glWindow);
   }
   SDL_GL_DeleteContext(glContext);
