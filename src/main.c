@@ -2,6 +2,7 @@
 #include <SDL2/SDL_events.h>
 #include <SDL2/SDL_video.h>
 #include <glad/glad.h>
+#include <stdatomic.h>
 #include <unistd.h>
 
 #define SCREEN_WIDTH   800
@@ -35,28 +36,39 @@ void init(void);
 void reshape(void);
 void display(void);
 
+void swapFloat(float* x1 , float* x2){
+  float aux = *x1;
+  *x1 = *x2;
+  *x2 = aux;
+}
 
 void drawSegmentByLineEquation(float x1, float y1, float x2, float y2, unsigned int resolution){
-  if (x1 > x2){
-    float aux = x1;
-    x1 = x2;
-    x2 = aux;
+  int a = 0, b = 1; 
+  if (x1 == x2){  // Vertical Line
+    swapFloat(&x1, &y1);
+    swapFloat(&x2, &y2);
+    a = 1;
+    b = 0;
+  }
+  if (x1 > x2){   // Drawing from right to left
+    swapFloat(&x1, &x2);
   }
   float dx = (x2 - x1);
   float dy = (y2 - y1);
   float m = dy / dx;
+  float x = x1;
   float y = y1;
 
   float verts[(resolution*3)+3];
 
-  float step = dx / resolution;
+  float step = dx / (resolution-1);
   int i = 0;
-  for (float x = x1; x <= x2; x += step) {
-    y += m*step;
-    verts[i*3] = x;
-    verts[i*3 + 1] = y;
+  for (i = 0; i <= resolution-1; i++) { // From 0 till res-1
+    verts[i*3 + a] = x;
+    verts[i*3 + b] = y;
     verts[i*3 + 2] = 0.0f;
-    i++;
+    x += step;
+    y += m*step;
   }
   
   glUseProgram(shaderProgram);
@@ -165,10 +177,11 @@ int main(int argc, char** argv) {
       }
     }
     
-    //drawSegmentByLineEquation(0.0f, 0.5f, 0.5f, -0.5f, 100);
-    drawSegmentByLineEquation(-0.5f, 0.5f, 0.5f, 0.5f, 10);
-    drawSegmentByLineEquation(0.5f, -0.5f, -0.5f, -0.5f, 10);  // NEED TO FIX
-    //drawSegmentByLineEquation(-0.5f, -0.5f, 0.0f, 0.5f, 100);
+    drawSegmentByLineEquation(0.0f, 0.5f, 0.5f, -0.5f, 20);
+    //drawSegmentByLineEquation(-0.5f, 0.0f, 0.5f, 0.0f, 100);
+    drawSegmentByLineEquation(0.5f, -0.5f, -0.5f, -0.5f, 100);  // Horiz Line
+    drawSegmentByLineEquation(0.0f, -0.5f, 0.0f, 0.5f, 10);  // Vertical Line
+    drawSegmentByLineEquation(-0.5f, -0.5f, 0.0f, 0.5f, 20);
     SDL_GL_SwapWindow(glWindow);
   }
   SDL_GL_DeleteContext(glContext);
