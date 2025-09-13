@@ -3,7 +3,7 @@
 #include <SDL2/SDL_video.h>
 #include <glad/glad.h>
 #include <stdatomic.h>
-#include <unistd.h>
+#include <unistd.h> // for wait time
 
 #define SCREEN_WIDTH   800
 #define SCREEN_HEIGHT  600
@@ -161,6 +161,184 @@ void vertexArray_Push(VertexArray* verArray, float x, float y, float z){
   verArray->size++;
 }
 
+// HALF-EDGE IMPLEMENTATION, extract later
+struct HE_Face;
+struct HE_HalfEdge;
+struct HE_Vertex;
+
+typedef struct HE_Vertex{
+  float x;
+  float y;
+  float z;
+  unsigned int inc_edge_ID;
+}HE_Vertex;
+
+typedef struct HE_Face{
+  unsigned int edge_ID;
+}HE_Face;
+
+typedef struct HE_HalfEdge{
+  unsigned int origin_vertex_ID;
+  unsigned int twin_edge_ID;
+  unsigned int inc_face_ID;
+  unsigned int prvsEdge_ID;
+  unsigned int nextEdge_ID;
+}HE_HalfEdge;
+
+typedef struct HE_Vertex_Array{
+  HE_Vertex* array;
+  unsigned int size;
+}HE_Vertex_Array;
+
+typedef struct HE_Face_Array{
+  HE_Face* array;
+  unsigned int size;
+}HE_Face_Array;
+
+typedef struct HE_Edge_Array{
+  HE_HalfEdge* array;
+  unsigned int size;
+}HE_Edge_Array;
+
+void HE_vertexArray_Push(HE_Vertex_Array* verArray, float x, float y, float z, unsigned int inc_edge_ID){
+  if(verArray->size == 0){
+    verArray->array = (HE_Vertex*)malloc(sizeof(HE_Vertex));
+  }else{
+    verArray->array = (HE_Vertex*)realloc(verArray->array, sizeof(HE_Vertex)*(verArray->size+1));
+  }
+  verArray->array[verArray->size].x = x;
+  verArray->array[verArray->size].y = y;
+  verArray->array[verArray->size].z = z;
+  verArray->array[verArray->size].inc_edge_ID = inc_edge_ID;
+  verArray->size++;
+}
+
+void HE_edgeArray_Push(HE_Edge_Array* edgeArray, unsigned int origin_vertex_ID, unsigned int twin_ID, unsigned int inc_face_ID, unsigned int nextEdge_ID, unsigned int prvsEdge_ID){
+  if(edgeArray->size == 0){
+    edgeArray->array = (HE_HalfEdge*)malloc(sizeof(HE_HalfEdge));
+  }else{
+    edgeArray->array = (HE_HalfEdge*)realloc(edgeArray->array, sizeof(HE_HalfEdge)*(edgeArray->size+1));
+  }
+  edgeArray->array[edgeArray->size].origin_vertex_ID = origin_vertex_ID;
+  edgeArray->array[edgeArray->size].twin_edge_ID = twin_ID;
+  edgeArray->array[edgeArray->size].inc_face_ID = inc_face_ID;
+  edgeArray->array[edgeArray->size].prvsEdge_ID = prvsEdge_ID;
+  edgeArray->array[edgeArray->size].nextEdge_ID = nextEdge_ID;
+  edgeArray->size++;
+}
+
+void HE_faceArray_Push(HE_Face_Array* faceArray, unsigned int edge_ID){
+  if(faceArray->size == 0){
+    faceArray->array = (HE_Face*)malloc(sizeof(HE_Face));
+  }else{
+    faceArray->array = (HE_Face*)realloc(faceArray->array, sizeof(HE_Face)*(faceArray->size+1));
+  }
+  faceArray->array[faceArray->size].edge_ID = edge_ID;
+  faceArray->size++;
+}
+
+void testHE(const char* filename){
+  FILE* fptr = fopen(filename, "r");
+  char data[50];
+  
+  HE_Vertex_Array verArray  = {NULL, 0};
+  HE_Edge_Array   edgeArray = {NULL, 0};
+  HE_Face_Array   faceArray = {NULL, 0};
+  char type;
+  float x, y, z;
+  fscanf(fptr, "%c", &type);
+  while(type == 'v'){
+    fscanf(fptr, "%f %f %f\n", &x, &y, &z);
+    HE_vertexArray_Push(&verArray, x, y, z, 0);
+    fscanf(fptr, "%c", &type);
+  }
+
+
+  int conMap [verArray.size][verArray.size];
+
+  for(int i = 0; i < verArray.size; i++)
+    for(int j = 0; j < verArray.size; j++)
+      conMap[i][j] = -1;
+
+  int v1, v2, v3, i;
+  i = 0;
+  while(type == 'f'){
+    fscanf(fptr, "%d %d %d\n", &v1, &v2, &v3);
+    conMap[v1-1][v2-1] = i++;
+    conMap[v2-1][v3-1] = i++;
+    conMap[v3-1][v1-1] = i++;
+
+    HE_faceArray_Push(&faceArray, edgeArray.size);
+    int index = edgeArray.size;
+    verArray.array[v1-1].inc_edge_ID = index;
+    verArray.array[v2-1].inc_edge_ID = index+1;
+    verArray.array[v3-1].inc_edge_ID = index+2;
+    HE_edgeArray_Push(&edgeArray, v1-1, 0, faceArray.size-1, index+1, index+2);
+    HE_edgeArray_Push(&edgeArray, v2-1, 0, faceArray.size-1, index+2, index);
+    HE_edgeArray_Push(&edgeArray, v3-1, 0, faceArray.size-1, index, index+1);
+
+    fscanf(fptr, "%c", &type);
+  }
+
+  for(int index = 0; index < edgeArray.size; index++){
+    HE_HalfEdge edgeData = edgeArray.array[index];
+    for(int i = 0; i < verArray.size; i++){
+      for(int j = 0; j < verArray.size; j++){
+        if(conMap[i][j] != index)
+          continue;
+        if(conMap[j][i] == -1){
+          HE_edgeArray_Push(&edgeArray, j, index, -1, -1, -1);
+          conMap[j][i] = edgeArray.size-1;
+        }
+        edgeArray.array[index].twin_edge_ID = conMap[j][i];
+      }
+    }
+  }
+
+  // Procurar edges com -1, pegar seu vértice destino e iterar por edges desse vértice que não tem next_edge
+
+  printf("Vertex Relationship Map\n");
+  for(int i = 0; i < verArray.size; i++){
+    for(int j = 0; j < verArray.size; j++){
+      if(conMap[i][j] == -1){
+        printf("// ");
+        continue;
+      }
+      printf("%.02d ", conMap[i][j]);
+    }
+    printf("\n");
+  }
+  printf("\n");
+      
+
+
+  // PRINTS
+  printf("Vertices\n");
+  for(int i = 0; i < verArray.size; i++){
+    HE_Vertex vert = verArray.array[i];
+    printf("%d %.2f %.2f %.2f %d\n", i, vert.x, vert.y, vert.z, vert.inc_edge_ID);
+  }
+  printf("\n");
+  printf("Faces\n");
+  for(int i = 0; i < faceArray.size; i++){
+    HE_Face face = faceArray.array[i];
+    printf("%d %.2d\n", i, face.edge_ID);
+  }
+  printf("\n");
+  printf("Edges\n");
+  for(int i = 0; i < edgeArray.size; i++){
+    HE_HalfEdge edge = edgeArray.array[i];
+    printf("%.2d %.2d %.2d %.2d %.2d %.2d\n", i, edge.origin_vertex_ID+1, edge.twin_edge_ID, edge.inc_face_ID, edge.nextEdge_ID, edge.prvsEdge_ID);
+  }
+  printf("\n");
+
+  // CLEANUP
+  free(verArray.array);
+  free(faceArray.array);
+  free(edgeArray.array);
+  fclose(fptr);
+}
+
 void drawOBJ(const char* filename){
   FILE* fptr = fopen(filename, "r");
   char data[50];
@@ -179,8 +357,14 @@ void drawOBJ(const char* filename){
   while(type == 'f'){
     fscanf(fptr, "%d %d %d\n", &v1, &v2, &v3);
     drawSegmentByLineEquation(verArray.verts[v1-1].x, verArray.verts[v1-1].y, verArray.verts[v2-1].x, verArray.verts[v2-1].y, 20);
+    //SDL_GL_SwapWindow(glWindow);
+    //sleep(1);
     drawSegmentByLineEquation(verArray.verts[v2-1].x, verArray.verts[v2-1].y, verArray.verts[v3-1].x, verArray.verts[v3-1].y, 20);
+    //SDL_GL_SwapWindow(glWindow);
+    //sleep(1);
     drawSegmentByLineEquation(verArray.verts[v3-1].x, verArray.verts[v3-1].y, verArray.verts[v1-1].x, verArray.verts[v1-1].y, 20);
+    //SDL_GL_SwapWindow(glWindow);
+    //sleep(1);
     fscanf(fptr, "%c", &type);
   }
 
@@ -227,7 +411,9 @@ int main(int argc, char** argv) {
         quit = 1;
       }
     }
+    testHE("test.obj");
     drawOBJ("test.obj");
+    //quit = 1;
     
     SDL_GL_SwapWindow(glWindow);
   }
