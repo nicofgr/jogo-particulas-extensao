@@ -280,6 +280,8 @@ void testHE(const char* filename){
     fscanf(fptr, "%c", &type);
   }
 
+  // Determina os twins dos edges a partir do mapa de relações
+  // Caso não tenha twin, cria um edge novo
   for(int index = 0; index < edgeArray.size; index++){
     HE_HalfEdge edgeData = edgeArray.array[index];
     for(int i = 0; i < verArray.size; i++){
@@ -295,7 +297,15 @@ void testHE(const char* filename){
     }
   }
 
-  // Procurar edges com -1, pegar seu vértice destino e iterar por edges desse vértice que não tem next_edge
+  // Percorre os edges por relações para encontrar o previous e o next
+  for(int index = 0; index < edgeArray.size; index++){
+    HE_HalfEdge edgeData = edgeArray.array[index];
+    HE_HalfEdge* array = edgeArray.array;
+    if(edgeData.nextEdge_ID != -1)
+      continue;
+    edgeArray.array[index].prvsEdge_ID = array[array[array[array[array[index].twin_edge_ID].nextEdge_ID].twin_edge_ID].nextEdge_ID].twin_edge_ID;
+    edgeArray.array[index].nextEdge_ID = array[array[array[array[array[index].twin_edge_ID].prvsEdge_ID].twin_edge_ID].prvsEdge_ID].twin_edge_ID;
+  }
 
   printf("Vertex Relationship Map\n");
   for(int i = 0; i < verArray.size; i++){
