@@ -342,6 +342,23 @@ void testHE(const char* filename){
   }
   printf("\n");
 
+  // DRAW FIGURE
+  for(int f = 0; f < faceArray.size; f++){
+    int startingEdge = faceArray.array[f].edge_ID;
+    int currentEdge = startingEdge;
+    do{
+      int originVertex = edgeArray.array[currentEdge].origin_vertex_ID;
+      float x1 = verArray.array[originVertex].x;
+      float y1 = verArray.array[originVertex].y;
+      int nextEdge = edgeArray.array[currentEdge].nextEdge_ID;
+      int nextVertex = edgeArray.array[nextEdge].origin_vertex_ID;
+      float x2 = verArray.array[nextVertex].x;
+      float y2 = verArray.array[nextVertex].y;
+      drawSegmentByLineEquation(x1/5, y1/5, x2/5, y2/5, 20);
+      currentEdge = nextEdge;
+    }while (currentEdge != startingEdge);
+  }
+
   // CLEANUP
   free(verArray.array);
   free(faceArray.array);
@@ -422,7 +439,7 @@ int main(int argc, char** argv) {
       }
     }
     testHE("test.obj");
-    drawOBJ("test.obj");
+    //drawOBJ("test.obj");
     //quit = 1;
     
     SDL_GL_SwapWindow(glWindow);
