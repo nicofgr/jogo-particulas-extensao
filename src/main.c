@@ -3,13 +3,18 @@
 #include "cglm/mat4.h"
 #include "cglm/types.h"
 #include "cglm/util.h"
+#include "cglm/vec3.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_events.h>
+#include <SDL2/SDL_keyboard.h>
+#include <SDL2/SDL_keycode.h>
 #include <SDL2/SDL_log.h>
+#include <SDL2/SDL_scancode.h>
 #include <SDL2/SDL_timer.h>
 #include <SDL2/SDL_video.h>
 #include <glad/glad.h>
 #include <stdatomic.h>
+#include <sys/types.h>
 #include <unistd.h> // for wait time
 #include <cglm/cglm.h>
 
@@ -66,6 +71,10 @@ typedef struct Color_RGBA{
   float A;
 }Color_RGBA;
 
+vec3 camera_pos   = {0.0f, 0.0f,  7.0f};
+vec3 camera_front = {0.0f, 0.0f, -1.0f};
+vec3 camera_up    = {0.0f, 1.0f,  0.0f};
+
 void drawSegmentByLineEquation(float x1, float y1, float x2, float y2, const unsigned int resolution, const Color_RGBA color){
   int a = 0, b = 1; 
   if (x1 == x2){  // Vertical Line
@@ -98,11 +107,15 @@ void drawSegmentByLineEquation(float x1, float y1, float x2, float y2, const uns
   mat4 model;
   glm_mat4_identity(model);
   //glm_scale(model, (vec4){0.2f, 0.2f, 0.2f, 1.0f});
-  glm_rotate(model, (float)SDL_GetTicks()/2000.0f, (vec3){0.0f, 1.0f, 0.0f});
+  //glm_rotate(model, (float)SDL_GetTicks()/2000.0f, (vec3){0.0f, 1.0f, 0.0f});
 
   mat4 view;
   glm_mat4_identity(view);
-  glm_translate(view, (vec3){0.0f, 0.0f, -7.0f});
+  //glm_translate(view, (vec3){0.0f, 0.0f, -7.0f});
+  
+  vec3 target_dir;
+  glm_vec3_add(camera_pos, camera_front, target_dir);
+  glm_lookat(camera_pos, target_dir, camera_up, view);
 
   mat4 proj;
   glm_perspective(glm_rad(45), (float)SCREEN_WIDTH/(float)SCREEN_HEIGHT, 0.1f, 100.0f, proj);
@@ -435,10 +448,28 @@ void testHE(const char* filename, const int counter){
 
 void input(int * quit){
     SDL_Event e;
-    while(SDL_PollEvent(&e) != 0){
-      if(e.type == SDL_QUIT){
-        *quit = TRUE;
+    const float camera_speed = 0.1f;
+    const Uint8* states = SDL_GetKeyboardState(NULL);
+    while(SDL_PollEvent(&e)){
+      switch(e.type){
+        case SDL_QUIT:
+          *quit = TRUE;
+          break;
       }
+    }
+    if(states[SDL_SCANCODE_W])
+      glm_vec3_muladds(camera_front, camera_speed, camera_pos);
+    if(states[SDL_SCANCODE_S])
+      glm_vec3_muladds(camera_front, -camera_speed, camera_pos);
+    if(states[SDL_SCANCODE_A]){
+      vec3 aux;
+      glm_vec3_crossn(camera_front, camera_up, aux);
+      glm_vec3_muladds(aux, -camera_speed, camera_pos);
+    }
+    if(states[SDL_SCANCODE_D]){
+      vec3 aux;
+      glm_vec3_crossn(camera_front, camera_up, aux);
+      glm_vec3_muladds(aux, camera_speed, camera_pos);
     }
 }
 
