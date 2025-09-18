@@ -1,3 +1,8 @@
+//#include "cglm/affine-pre.h"
+#include "cglm/affine.h"
+#include "cglm/mat4.h"
+#include "cglm/types.h"
+#include "cglm/util.h"
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_events.h>
 #include <SDL2/SDL_log.h>
@@ -6,6 +11,7 @@
 #include <glad/glad.h>
 #include <stdatomic.h>
 #include <unistd.h> // for wait time
+#include <cglm/cglm.h>
 
 #define SCREEN_WIDTH   800
 #define SCREEN_HEIGHT  600
@@ -19,10 +25,13 @@ SDL_GLContext glContext = NULL;
 
 const char *vertexShaderSource = "#version 330 core\n"
     "layout (location = 0) in vec3 aPos;\n"
+    "uniform mat4 model;\n"
+    "uniform mat4 view;\n"
+    "uniform mat4 projection;\n"
     "void main()\n"
     "{\n"
-    "   gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);\n"
-    "   gl_PointSize = 3.0;\n"
+    "   gl_Position = projection*view*model*vec4(aPos.x, aPos.y, aPos.z, 1.0);\n"
+    "   gl_PointSize = 20/gl_Position.z;\n"
     "}\0";
 
 const char *fragmentShaderSource = "#version 330 core\n"
@@ -86,10 +95,27 @@ void drawSegmentByLineEquation(float x1, float y1, float x2, float y2, const uns
     x += step;
     y += m*step;
   }
+  mat4 model;
+  glm_mat4_identity(model);
+  //glm_scale(model, (vec4){0.2f, 0.2f, 0.2f, 1.0f});
+  glm_rotate(model, (float)SDL_GetTicks()/2000.0f, (vec3){0.0f, 1.0f, 0.0f});
+
+  mat4 view;
+  glm_mat4_identity(view);
+  glm_translate(view, (vec3){0.0f, 0.0f, -7.0f});
+
+  mat4 proj;
+  glm_perspective(glm_rad(45), (float)SCREEN_WIDTH/(float)SCREEN_HEIGHT, 0.1f, 100.0f, proj);
   
   int vertexColorLocation = glGetUniformLocation(shaderProgram, "ourColor");
+  int transformLocation   = glGetUniformLocation(shaderProgram, "model");
+  int viewLocation        = glGetUniformLocation(shaderProgram, "view");
+  int projLocation        = glGetUniformLocation(shaderProgram, "projection");
   glUseProgram(shaderProgram);
   glUniform4f(vertexColorLocation, color.R, color.G, color.B, color.A);
+  glUniformMatrix4fv(transformLocation, 1, GL_FALSE, (const float*)model);
+  glUniformMatrix4fv(viewLocation, 1, GL_FALSE, (const float*)view);
+  glUniformMatrix4fv(projLocation, 1, GL_FALSE, (const float*)proj);
   glBindVertexArray(VAO);
   glBindBuffer(GL_ARRAY_BUFFER, VBO);
   glBufferData(GL_ARRAY_BUFFER, sizeof(verts), verts, GL_STATIC_DRAW);
@@ -265,6 +291,8 @@ void testHE(const char* filename, const int counter){
   HE_Face_Array   faceArray = {NULL, 0};
   char type;
   float x, y, z;
+
+  // Reading vertices
   fscanf(fptr, "%c", &type);
   while(type == 'v'){
     fscanf(fptr, "%f %f %f\n", &x, &y, &z);
@@ -272,7 +300,22 @@ void testHE(const char* filename, const int counter){
     fscanf(fptr, "%c", &type);
   }
 
+  // Centering model in local space
+  float sumX = 0;
+  float sumY = 0;
+  float sumZ = 0;
+  for(int i = 0; i < verArray.size; i++){
+    sumX += verArray.array[i].x; 
+    sumY += verArray.array[i].y; 
+    sumZ += verArray.array[i].z; 
+  }
+  for(int i = 0; i < verArray.size; i++){
+    verArray.array[i].x -= (sumX/verArray.size);
+    verArray.array[i].y -= (sumY/verArray.size);
+    verArray.array[i].z -= (sumZ/verArray.size);
+  }
 
+  // -----------
   int conMap [verArray.size][verArray.size];
 
   for(int i = 0; i < verArray.size; i++)
@@ -362,68 +405,31 @@ void testHE(const char* filename, const int counter){
   printf("\n");
 
   // DRAW FIGURE
-  float update_scds = 0.5;
-  float cnt = ((int)(SDL_GetTicks()/(1000.0f*update_scds))%(faceArray.size*3)) + 1;
+  float update_scds = 0.3;
+  float cnt = (int)(SDL_GetTicks()/(1000.0f*update_scds))%(edgeArray.size) + 1;
   int step = 0;
-  for(int f = 0; f < faceArray.size; f++){
-    int startingEdge = faceArray.array[f].edge_ID;
-    int currentEdge = startingEdge;
-    do{
-      if (step == cnt){
-        break;
-      }
-      int originVertex = edgeArray.array[currentEdge].origin_vertex_ID;
-      float x1 = verArray.array[originVertex].x;
-      float y1 = verArray.array[originVertex].y;
-      int nextEdge = edgeArray.array[currentEdge].nextEdge_ID;
-      int nextVertex = edgeArray.array[nextEdge].origin_vertex_ID;
-      float x2 = verArray.array[nextVertex].x;
-      float y2 = verArray.array[nextVertex].y;
-      drawSegmentByLineEquation(x1/5, y1/5, x2/5, y2/5, 20, (Color_RGBA){1.0f, 1.0f, 0.0f, 0.5f});
-      if (step == cnt-1)
-        drawSegmentByLineEquation(x1/5, y1/5, x2/5, y2/5, 20, (Color_RGBA){1.0f, 0.0f, 0.0f, 0.5f});
-      currentEdge = nextEdge;
-      step++;
-    }while (currentEdge != startingEdge);
+
+  for(int e = 0; e <= edgeArray.size; e++){
+    if(step == cnt)
+      break;
+    int originVertex = edgeArray.array[e].origin_vertex_ID;
+    float x1 = verArray.array[originVertex].x;
+    float y1 = verArray.array[originVertex].y;
+
+    int nextEdge = edgeArray.array[e].nextEdge_ID;
+    int nextVertex = edgeArray.array[nextEdge].origin_vertex_ID;
+    float x2 = verArray.array[nextVertex].x;
+    float y2 = verArray.array[nextVertex].y;
+    drawSegmentByLineEquation(x1, y1, x2, y2, 20, (Color_RGBA){1.0f, 1.0f, 0.0f, 0.5f});
+    if (step == cnt-1)
+      drawSegmentByLineEquation(x1, y1, x2, y2, 20, (Color_RGBA){1.0f, 0.0f, 0.0f, 0.5f});
+    step++;
   }
 
   // CLEANUP
   free(verArray.array);
   free(faceArray.array);
   free(edgeArray.array);
-  fclose(fptr);
-}
-
-void drawOBJ(const char* filename){
-  FILE* fptr = fopen(filename, "r");
-  char data[50];
-  
-  VertexArray verArray = {NULL, 0};
-  char type;
-  float x, y, z;
-  fscanf(fptr, "%c", &type);
-  while(type == 'v'){
-    fscanf(fptr, "%f %f %f\n", &x, &y, &z);
-    vertexArray_Push(&verArray, x/5, y/5, z/5);
-    fscanf(fptr, "%c", &type);
-  }
-
-  int v1, v2, v3;
-  while(type == 'f'){
-    fscanf(fptr, "%d %d %d\n", &v1, &v2, &v3);
-    //drawSegmentByLineEquation(verArray.verts[v1-1].x, verArray.verts[v1-1].y, verArray.verts[v2-1].x, verArray.verts[v2-1].y, 20);
-    //SDL_GL_SwapWindow(glWindow);
-    //sleep(1);
-    //drawSegmentByLineEquation(verArray.verts[v2-1].x, verArray.verts[v2-1].y, verArray.verts[v3-1].x, verArray.verts[v3-1].y, 20);
-    //SDL_GL_SwapWindow(glWindow);
-    //sleep(1);
-    //drawSegmentByLineEquation(verArray.verts[v3-1].x, verArray.verts[v3-1].y, verArray.verts[v1-1].x, verArray.verts[v1-1].y, 20);
-    //SDL_GL_SwapWindow(glWindow);
-    //sleep(1);
-    fscanf(fptr, "%c", &type);
-  }
-
-  free(verArray.verts);
   fclose(fptr);
 }
 
@@ -458,8 +464,10 @@ void update(int* step){
 void draw(const int step){
   glClear(GL_COLOR_BUFFER_BIT);
   testHE("test.obj", step);
-  //drawOBJ("test.obj");
   SDL_GL_SwapWindow(glWindow);
+
+  mat4 proj;
+  glm_perspective(glm_rad(45), (float)SCREEN_WIDTH/(float)SCREEN_HEIGHT, 0.1f, 100.0f, proj);
 }
 
 int main(int argc, char** argv) {
