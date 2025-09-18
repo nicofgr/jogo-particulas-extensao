@@ -1,5 +1,7 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_events.h>
+#include <SDL2/SDL_log.h>
+#include <SDL2/SDL_timer.h>
 #include <SDL2/SDL_video.h>
 #include <glad/glad.h>
 #include <stdatomic.h>
@@ -7,6 +9,10 @@
 
 #define SCREEN_WIDTH   800
 #define SCREEN_HEIGHT  600
+#define TRUE  1
+#define FALSE 0
+#define TARGET_FPS 60
+#define FRAME_TARGET_TIME 1000/TARGET_FPS
 
 SDL_Window*   glWindow = NULL;
 SDL_GLContext glContext = NULL;
@@ -21,9 +27,11 @@ const char *vertexShaderSource = "#version 330 core\n"
 
 const char *fragmentShaderSource = "#version 330 core\n"
     "out vec4 FragColor;\n"
+    "uniform vec4 ourColor;\n"
     "void main()\n"
     "{\n"
     "   FragColor = vec4(1.0f, 0.5f, 0.2f, 1.0f);\n"
+    "   FragColor = ourColor;\n"
     "}\0";
 
 unsigned int vertexShader;
@@ -42,7 +50,14 @@ void swapFloat(float* x1 , float* x2){
   *x2 = aux;
 }
 
-void drawSegmentByLineEquation(float x1, float y1, float x2, float y2, unsigned int resolution){
+typedef struct Color_RGBA{
+  float R;
+  float G;
+  float B;
+  float A;
+}Color_RGBA;
+
+void drawSegmentByLineEquation(float x1, float y1, float x2, float y2, const unsigned int resolution, const Color_RGBA color){
   int a = 0, b = 1; 
   if (x1 == x2){  // Vertical Line
     swapFloat(&x1, &y1);
@@ -72,7 +87,9 @@ void drawSegmentByLineEquation(float x1, float y1, float x2, float y2, unsigned 
     y += m*step;
   }
   
+  int vertexColorLocation = glGetUniformLocation(shaderProgram, "ourColor");
   glUseProgram(shaderProgram);
+  glUniform4f(vertexColorLocation, color.R, color.G, color.B, color.A);
   glBindVertexArray(VAO);
   glBindBuffer(GL_ARRAY_BUFFER, VBO);
   glBufferData(GL_ARRAY_BUFFER, sizeof(verts), verts, GL_STATIC_DRAW);
@@ -85,6 +102,7 @@ void drawSegmentByLineEquation(float x1, float y1, float x2, float y2, unsigned 
 
 
 void init() {
+  glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
   glEnable(GL_PROGRAM_POINT_SIZE);
 
   int success;
@@ -237,7 +255,8 @@ void HE_faceArray_Push(HE_Face_Array* faceArray, unsigned int edge_ID){
   faceArray->size++;
 }
 
-void testHE(const char* filename){
+
+void testHE(const char* filename, const int counter){
   FILE* fptr = fopen(filename, "r");
   char data[50];
   
@@ -343,10 +362,16 @@ void testHE(const char* filename){
   printf("\n");
 
   // DRAW FIGURE
+  float update_scds = 0.5;
+  float cnt = ((int)(SDL_GetTicks()/(1000.0f*update_scds))%(faceArray.size*3)) + 1;
+  int step = 0;
   for(int f = 0; f < faceArray.size; f++){
     int startingEdge = faceArray.array[f].edge_ID;
     int currentEdge = startingEdge;
     do{
+      if (step == cnt){
+        break;
+      }
       int originVertex = edgeArray.array[currentEdge].origin_vertex_ID;
       float x1 = verArray.array[originVertex].x;
       float y1 = verArray.array[originVertex].y;
@@ -354,8 +379,11 @@ void testHE(const char* filename){
       int nextVertex = edgeArray.array[nextEdge].origin_vertex_ID;
       float x2 = verArray.array[nextVertex].x;
       float y2 = verArray.array[nextVertex].y;
-      drawSegmentByLineEquation(x1/5, y1/5, x2/5, y2/5, 20);
+      drawSegmentByLineEquation(x1/5, y1/5, x2/5, y2/5, 20, (Color_RGBA){1.0f, 1.0f, 0.0f, 0.5f});
+      if (step == cnt-1)
+        drawSegmentByLineEquation(x1/5, y1/5, x2/5, y2/5, 20, (Color_RGBA){1.0f, 0.0f, 0.0f, 0.5f});
       currentEdge = nextEdge;
+      step++;
     }while (currentEdge != startingEdge);
   }
 
@@ -383,13 +411,13 @@ void drawOBJ(const char* filename){
   int v1, v2, v3;
   while(type == 'f'){
     fscanf(fptr, "%d %d %d\n", &v1, &v2, &v3);
-    drawSegmentByLineEquation(verArray.verts[v1-1].x, verArray.verts[v1-1].y, verArray.verts[v2-1].x, verArray.verts[v2-1].y, 20);
+    //drawSegmentByLineEquation(verArray.verts[v1-1].x, verArray.verts[v1-1].y, verArray.verts[v2-1].x, verArray.verts[v2-1].y, 20);
     //SDL_GL_SwapWindow(glWindow);
     //sleep(1);
-    drawSegmentByLineEquation(verArray.verts[v2-1].x, verArray.verts[v2-1].y, verArray.verts[v3-1].x, verArray.verts[v3-1].y, 20);
+    //drawSegmentByLineEquation(verArray.verts[v2-1].x, verArray.verts[v2-1].y, verArray.verts[v3-1].x, verArray.verts[v3-1].y, 20);
     //SDL_GL_SwapWindow(glWindow);
     //sleep(1);
-    drawSegmentByLineEquation(verArray.verts[v3-1].x, verArray.verts[v3-1].y, verArray.verts[v1-1].x, verArray.verts[v1-1].y, 20);
+    //drawSegmentByLineEquation(verArray.verts[v3-1].x, verArray.verts[v3-1].y, verArray.verts[v1-1].x, verArray.verts[v1-1].y, 20);
     //SDL_GL_SwapWindow(glWindow);
     //sleep(1);
     fscanf(fptr, "%c", &type);
@@ -397,6 +425,41 @@ void drawOBJ(const char* filename){
 
   free(verArray.verts);
   fclose(fptr);
+}
+
+void input(int * quit){
+    SDL_Event e;
+    while(SDL_PollEvent(&e) != 0){
+      if(e.type == SDL_QUIT){
+        *quit = TRUE;
+      }
+    }
+}
+
+int last_frame_time = 0;
+int lastTime = 0;
+
+void update(int* step){
+
+  int wait_time = FRAME_TARGET_TIME - (SDL_GetTicks() - last_frame_time);
+  if(wait_time > 0 && wait_time <= FRAME_TARGET_TIME)
+    SDL_Delay(wait_time);
+
+  float delta_time = (SDL_GetTicks() - last_frame_time) / 1000.0f;
+  last_frame_time = SDL_GetTicks();
+
+  *step = 0;
+  float currentTime = SDL_GetTicks();
+  if(currentTime - lastTime >= 500.0f){ // Updates every x seconds
+    *step = 1;
+    lastTime = SDL_GetTicks();
+  }
+}
+void draw(const int step){
+  glClear(GL_COLOR_BUFFER_BIT);
+  testHE("test.obj", step);
+  //drawOBJ("test.obj");
+  SDL_GL_SwapWindow(glWindow);
 }
 
 int main(int argc, char** argv) {
@@ -429,20 +492,12 @@ int main(int argc, char** argv) {
 
 
   init();
-
-  int quit = 0;
-  while(quit == 0){
-    SDL_Event e;
-    while(SDL_PollEvent(&e) != 0){
-      if(e.type == SDL_QUIT){
-        quit = 1;
-      }
-    }
-    testHE("test.obj");
-    //drawOBJ("test.obj");
-    //quit = 1;
-    
-    SDL_GL_SwapWindow(glWindow);
+  int quit = FALSE;
+  int counter = 0;
+  while(quit == FALSE){
+    input(&quit);
+    update(&counter);
+    draw(counter);
   }
   SDL_GL_DeleteContext(glContext);
   SDL_DestroyWindow(glWindow);
