@@ -9,6 +9,7 @@
 #include <SDL2/SDL_keyboard.h>
 #include <SDL2/SDL_keycode.h>
 #include <SDL2/SDL_log.h>
+#include <SDL2/SDL_mouse.h>
 #include <SDL2/SDL_scancode.h>
 #include <SDL2/SDL_timer.h>
 #include <SDL2/SDL_video.h>
@@ -28,6 +29,9 @@
 SDL_Window*   glWindow = NULL;
 SDL_GLContext glContext = NULL;
 
+float yaw = -90.0f;
+float pitch = 0.0f;
+
 const char *vertexShaderSource = "#version 330 core\n"
     "layout (location = 0) in vec3 aPos;\n"
     "uniform mat4 model;\n"
@@ -36,7 +40,7 @@ const char *vertexShaderSource = "#version 330 core\n"
     "void main()\n"
     "{\n"
     "   gl_Position = projection*view*model*vec4(aPos.x, aPos.y, aPos.z, 1.0);\n"
-    "   gl_PointSize = 20/gl_Position.z;\n"
+    "   gl_PointSize = 40/gl_Position.z;\n"
     "}\0";
 
 const char *fragmentShaderSource = "#version 330 core\n"
@@ -107,13 +111,19 @@ void drawSegmentByLineEquation(float x1, float y1, float x2, float y2, const uns
   mat4 model;
   glm_mat4_identity(model);
   //glm_scale(model, (vec4){0.2f, 0.2f, 0.2f, 1.0f});
-  //glm_rotate(model, (float)SDL_GetTicks()/2000.0f, (vec3){0.0f, 1.0f, 0.0f});
+  glm_rotate(model, (float)SDL_GetTicks()/2000.0f, (vec3){0.0f, 1.0f, 0.0f});
 
   mat4 view;
   glm_mat4_identity(view);
   //glm_translate(view, (vec3){0.0f, 0.0f, -7.0f});
   
   vec3 target_dir;
+
+  vec3 direction;
+  direction[0] = cos(glm_rad(yaw)) * cos(glm_rad(pitch));
+  direction[1] = sin(glm_rad(pitch));
+  direction[2] = sin(glm_rad(yaw)) * cos(glm_rad(pitch));
+  glm_normalize_to(direction, camera_front);
   glm_vec3_add(camera_pos, camera_front, target_dir);
   glm_lookat(camera_pos, target_dir, camera_up, view);
 
@@ -141,6 +151,7 @@ void drawSegmentByLineEquation(float x1, float y1, float x2, float y2, const uns
 
 
 void init() {
+  SDL_SetRelativeMouseMode(SDL_TRUE);
   glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
   glEnable(GL_PROGRAM_POINT_SIZE);
 
@@ -382,22 +393,24 @@ void testHE(const char* filename, const int counter){
     edgeArray.array[index].nextEdge_ID = array[array[array[array[array[index].twin_edge_ID].prvsEdge_ID].twin_edge_ID].prvsEdge_ID].twin_edge_ID;
   }
 
-  printf("Vertex Relationship Map\n");
+
+  //printf("Vertex Relationship Map\n");
   for(int i = 0; i < verArray.size; i++){
     for(int j = 0; j < verArray.size; j++){
       if(conMap[i][j] == -1){
-        printf("// ");
+        //printf("// ");
         continue;
       }
-      printf("%.02d ", conMap[i][j]);
+      //printf("%.02d ", conMap[i][j]);
     }
-    printf("\n");
+    //printf("\n");
   }
-  printf("\n");
+ // printf("\n");
       
 
 
   // PRINTS
+  /**
   printf("Vertices\n");
   for(int i = 0; i < verArray.size; i++){
     HE_Vertex vert = verArray.array[i];
@@ -416,6 +429,7 @@ void testHE(const char* filename, const int counter){
     printf("%.2d %.2d %.2d %.2d %.2d %.2d\n", i, edge.origin_vertex_ID+1, edge.twin_edge_ID, edge.inc_face_ID, edge.nextEdge_ID, edge.prvsEdge_ID);
   }
   printf("\n");
+  **/
 
   // DRAW FIGURE
   float update_scds = 0.3;
@@ -471,6 +485,13 @@ void input(int * quit){
       glm_vec3_crossn(camera_front, camera_up, aux);
       glm_vec3_muladds(aux, camera_speed, camera_pos);
     }
+
+    const float sensitivity = 0.25;
+    int x = 0, y = 0;
+    SDL_GetRelativeMouseState(&x, &y);
+    yaw += x*sensitivity;
+    pitch -= y*sensitivity;
+    printf("%d, %d\n", x, y);
 }
 
 int last_frame_time = 0;
