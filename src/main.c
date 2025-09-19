@@ -394,44 +394,6 @@ void testHE(const char* filename, const int counter){
                 edgeArray.array[index].nextEdge_ID = array[array[array[array[array[index].twin_edge_ID].prvsEdge_ID].twin_edge_ID].prvsEdge_ID].twin_edge_ID;
         }
 
-
-        //printf("Vertex Relationship Map\n");
-        for(int i = 0; i < verArray.size; i++){
-                for(int j = 0; j < verArray.size; j++){
-                        if(conMap[i][j] == -1){
-                                //printf("// ");
-                                continue;
-                        }
-                        //printf("%.02d ", conMap[i][j]);
-                }
-                //printf("\n");
-        }
-        // printf("\n");
-
-
-
-        // PRINTS
-        /**
-          printf("Vertices\n");
-          for(int i = 0; i < verArray.size; i++){
-          HE_Vertex vert = verArray.array[i];
-          printf("%d %.2f %.2f %.2f %d\n", i, vert.x, vert.y, vert.z, vert.inc_edge_ID);
-          }
-          printf("\n");
-          printf("Faces\n");
-          for(int i = 0; i < faceArray.size; i++){
-          HE_Face face = faceArray.array[i];
-          printf("%d %.2d\n", i, face.edge_ID);
-          }
-          printf("\n");
-          printf("Edges\n");
-          for(int i = 0; i < edgeArray.size; i++){
-          HE_HalfEdge edge = edgeArray.array[i];
-          printf("%.2d %.2d %.2d %.2d %.2d %.2d\n", i, edge.origin_vertex_ID+1, edge.twin_edge_ID, edge.inc_face_ID, edge.nextEdge_ID, edge.prvsEdge_ID);
-          }
-          printf("\n");
-         **/
-
         // DRAW FIGURE
         float update_scds = 0.3;
         float cnt = (int)(SDL_GetTicks()/(1000.0f*update_scds))%(edgeArray.size) + 1;
@@ -534,9 +496,136 @@ void update(int* step){
         }
 }
 
-void load_OBJ(const char* filename){
+typedef struct{
+        char* string;
+        unsigned int size;
+} String;
 
+typedef struct{
+        unsigned int* vertex_ID;
+        unsigned int size;
+}Face;
+
+typedef struct{
+        Face* array;
+        unsigned int size;
+}FaceArray;
+
+typedef struct{
+        VertexArray vertex;
+        FaceArray   face;
+} OBJ;
+
+void face_array_push(FaceArray* faceArray, const Face face){
+        if(faceArray->size == 0){
+                faceArray->array = (Face*)malloc(sizeof(Face));
+        }else{
+                faceArray->array = (Face*)realloc(faceArray->array, sizeof(Face)*(faceArray->size+1));
+        }
+        faceArray->array[faceArray->size] = face;
+        faceArray->size++;
 }
+
+void face_push(Face* face, unsigned int vertex_ID){
+        if(face->size == 0){
+                face->vertex_ID = (unsigned int*)malloc(sizeof(unsigned int));
+        }else{
+                face->vertex_ID = (unsigned int*)realloc(face->vertex_ID, sizeof(unsigned int)*(face->size+1));
+        }
+        face->vertex_ID[face->size] = vertex_ID;
+        face->size++;
+}
+
+void read_obj(const char* filename, OBJ* objct){
+        FILE* file = fopen(filename, "r");
+        if(file == NULL){
+                printf("File %s could not be opened\n", filename);
+                exit(1);
+        }
+
+        fseek(file, 0, SEEK_END);
+        int file_size = ftell(file);
+        fseek(file, 0, SEEK_SET);
+
+        VertexArray vertices = {NULL, 0};
+        FaceArray faces = {NULL, 0};
+        
+        int ch;
+        while(1){
+                float x, y, z, w = 1;
+                char v;
+                Face face = {NULL, 0};
+                ch = fgetc(file);
+                if(ch == EOF)
+                        break;
+                switch(ch){
+                        case 'v':
+                                fscanf(file, "%f %f %f %f", &x, &y ,&z, &w);
+                                //printf("v %.2f %.2f %.2f %.2f\n", x, y, z, w);
+                                vertexArray_Push(&vertices, x, y, z);
+                                break;
+                        case 'f':
+                                //printf("f ");
+                                while(fscanf(file, "%c", &v) == 1){
+                                        if(v == '\n')
+                                                break;
+                                        if(v == ' ')
+                                                continue;
+                                        if(v == '/'){
+                                                int aux = fgetc(file);
+                                                while(1){
+                                                        if(aux == '\n' || aux == ' ')
+                                                                break;
+                                                        aux = fgetc(file);
+                                                }
+                                                if(aux == '\n')
+                                                        break;
+                                                continue;
+                                        }
+                                        face_push(&face, v - '0');
+                                        //printf("%u ", v - '0');
+                                }
+                                //printf("\n");
+                                face_array_push(&faces, face);
+                                break;
+                }
+        }
+        if(0){
+        printf("STRUCTURES\n");
+        for(int i = 0; i < vertices.size; i++){
+                float x = vertices.verts[i].x;
+                float y = vertices.verts[i].y;
+                float z = vertices.verts[i].z;
+                printf("v %.2f %.2f %.2f\n", x, y, z);
+        }
+
+        printf("Faces\n");
+        for(int i = 0; i < faces.size; i++){
+                printf("f ");
+                for(int j = 0; j < faces.array[i].size; j++){
+                        printf("%u ", faces.array[i].vertex_ID[j]);
+                }
+                printf("\n");
+        }
+        }
+        
+        objct->face   = faces;
+        objct->vertex = vertices;
+
+        fclose(file);
+}
+
+void free_obj(OBJ object){
+        FaceArray faces      = object.face;
+        VertexArray vertices = object.vertex;
+        for(int i = 0; i < faces.size; i++){
+                free(faces.array[i].vertex_ID);
+        }
+        free(vertices.verts);
+        free(faces.array);
+}
+
+
 void draw(const int step){
         glClear(GL_COLOR_BUFFER_BIT);
         testHE("test.obj", step);
@@ -580,11 +669,15 @@ int main(int argc, char** argv) {
         init();
         int quit = FALSE;
         int counter = 0;
+        OBJ object;
         while(quit == FALSE){
+                read_obj("test.obj", &object);
                 input(&quit);
-                update(&counter);
-                draw(counter);
+                //update(&counter);
+                //draw(counter);
+                quit = TRUE;
         }
+        free_obj(object);
         SDL_GL_DeleteContext(glContext);
         SDL_DestroyWindow(glWindow);
         SDL_Quit();
