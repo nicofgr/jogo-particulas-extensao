@@ -307,121 +307,6 @@ void HE_faceArray_Push(HE_Face_Array* faceArray, unsigned int edge_ID){
 }
 
 
-void testHE(const char* filename, const int counter){
-        FILE* fptr = fopen(filename, "r");
-        char data[50];
-
-        HE_Vertex_Array verArray  = {NULL, 0};
-        HE_Edge_Array   edgeArray = {NULL, 0};
-        HE_Face_Array   faceArray = {NULL, 0};
-        char type;
-        float x, y, z;
-
-        // Reading vertices
-        fscanf(fptr, "%c", &type);
-        while(type == 'v'){
-                fscanf(fptr, "%f %f %f\n", &x, &y, &z);
-                HE_vertexArray_Push(&verArray, x, y, z, 0);
-                fscanf(fptr, "%c", &type);
-        }
-
-        // Centering model in local space
-        float sumX = 0;
-        float sumY = 0;
-        float sumZ = 0;
-        for(int i = 0; i < verArray.size; i++){
-                sumX += verArray.array[i].x; 
-                sumY += verArray.array[i].y; 
-                sumZ += verArray.array[i].z; 
-        }
-        for(int i = 0; i < verArray.size; i++){
-                verArray.array[i].x -= (sumX/verArray.size);
-                verArray.array[i].y -= (sumY/verArray.size);
-                verArray.array[i].z -= (sumZ/verArray.size);
-        }
-
-        // -----------
-        int conMap [verArray.size][verArray.size];
-
-        for(int i = 0; i < verArray.size; i++)
-                for(int j = 0; j < verArray.size; j++)
-                        conMap[i][j] = -1;
-
-        int v1, v2, v3, i;
-        i = 0;
-        while(type == 'f'){
-                fscanf(fptr, "%d %d %d\n", &v1, &v2, &v3);
-                conMap[v1-1][v2-1] = i++;
-                conMap[v2-1][v3-1] = i++;
-                conMap[v3-1][v1-1] = i++;
-
-                HE_faceArray_Push(&faceArray, edgeArray.size);
-                int index = edgeArray.size;
-                verArray.array[v1-1].inc_edge_ID = index;
-                verArray.array[v2-1].inc_edge_ID = index+1;
-                verArray.array[v3-1].inc_edge_ID = index+2;
-                HE_edgeArray_Push(&edgeArray, v1-1, 0, faceArray.size-1, index+1, index+2);
-                HE_edgeArray_Push(&edgeArray, v2-1, 0, faceArray.size-1, index+2, index);
-                HE_edgeArray_Push(&edgeArray, v3-1, 0, faceArray.size-1, index, index+1);
-
-                fscanf(fptr, "%c", &type);
-        }
-
-        // Determina os twins dos edges a partir do mapa de relações
-        // Caso não tenha twin, cria um edge novo
-        for(int index = 0; index < edgeArray.size; index++){
-                HE_HalfEdge edgeData = edgeArray.array[index];
-                for(int i = 0; i < verArray.size; i++){
-                        for(int j = 0; j < verArray.size; j++){
-                                if(conMap[i][j] != index)
-                                        continue;
-                                if(conMap[j][i] == -1){
-                                        HE_edgeArray_Push(&edgeArray, j, index, -1, -1, -1);
-                                        conMap[j][i] = edgeArray.size-1;
-                                }
-                                edgeArray.array[index].twin_edge_ID = conMap[j][i];
-                        }
-                }
-        }
-
-        // Percorre os edges por relações para encontrar o previous e o next
-        for(int index = 0; index < edgeArray.size; index++){
-                HE_HalfEdge edgeData = edgeArray.array[index];
-                HE_HalfEdge* array = edgeArray.array;
-                if(edgeData.nextEdge_ID != -1)
-                        continue;
-                edgeArray.array[index].prvsEdge_ID = array[array[array[array[array[index].twin_edge_ID].nextEdge_ID].twin_edge_ID].nextEdge_ID].twin_edge_ID;
-                edgeArray.array[index].nextEdge_ID = array[array[array[array[array[index].twin_edge_ID].prvsEdge_ID].twin_edge_ID].prvsEdge_ID].twin_edge_ID;
-        }
-
-        // DRAW FIGURE
-        float update_scds = 0.3;
-        float cnt = (int)(SDL_GetTicks()/(1000.0f*update_scds))%(edgeArray.size) + 1;
-        int step = 0;
-
-        for(int e = 0; e <= edgeArray.size; e++){
-                if(step == cnt)
-                        break;
-                int originVertex = edgeArray.array[e].origin_vertex_ID;
-                float x1 = verArray.array[originVertex].x;
-                float y1 = verArray.array[originVertex].y;
-
-                int nextEdge = edgeArray.array[e].nextEdge_ID;
-                int nextVertex = edgeArray.array[nextEdge].origin_vertex_ID;
-                float x2 = verArray.array[nextVertex].x;
-                float y2 = verArray.array[nextVertex].y;
-                drawSegmentByLineEquation(x1, y1, x2, y2, 20, (Color_RGBA){1.0f, 1.0f, 0.0f, 0.5f});
-                if (step == cnt-1)
-                        drawSegmentByLineEquation(x1, y1, x2, y2, 20, (Color_RGBA){1.0f, 0.0f, 0.0f, 0.5f});
-                step++;
-        }
-
-        // CLEANUP
-        free(verArray.array);
-        free(faceArray.array);
-        free(edgeArray.array);
-        fclose(fptr);
-}
 
 void input(int * quit){
         SDL_Event e;
@@ -625,6 +510,125 @@ void free_obj(OBJ object){
         free(faces.array);
 }
 
+void testHE(const char* filename, const int counter){
+
+        float x, y, z;
+        OBJ object;
+        read_obj(filename, &object);
+
+        HE_Vertex_Array verArray  = {NULL, 0};
+        HE_Face_Array   faceArray = {NULL, 0};
+        HE_Edge_Array   edgeArray = {NULL, 0};
+
+        // Carrega os vértices
+        for(int i = 0; i < object.vertex.size; i++){
+                x = object.vertex.verts[i].x;
+                y = object.vertex.verts[i].y;
+                z = object.vertex.verts[i].z;
+                HE_vertexArray_Push(&verArray, x, y, z, 0);
+        }
+
+        // Centering model in local space
+        float sumX = 0;
+        float sumY = 0;
+        float sumZ = 0;
+        for(int i = 0; i < verArray.size; i++){
+                sumX += verArray.array[i].x; 
+                sumY += verArray.array[i].y; 
+                sumZ += verArray.array[i].z; 
+        }
+        for(int i = 0; i < verArray.size; i++){
+                verArray.array[i].x -= (sumX/verArray.size);
+                verArray.array[i].y -= (sumY/verArray.size);
+                verArray.array[i].z -= (sumZ/verArray.size);
+        }
+
+        // -----------
+        int conMap [verArray.size][verArray.size];
+
+        for(int i = 0; i < verArray.size; i++)
+                for(int j = 0; j < verArray.size; j++)
+                        conMap[i][j] = -1;
+
+
+
+        int v1, v2, v3;
+        int edge_counter = 0;
+        for(int i = 0; i < object.face.size; i++){
+                v1 = object.face.array[i].vertex_ID[0];
+                v2 = object.face.array[i].vertex_ID[1];
+                v3 = object.face.array[i].vertex_ID[2];
+
+                conMap[v1-1][v2-1] = edge_counter++;
+                conMap[v2-1][v3-1] = edge_counter++;
+                conMap[v3-1][v1-1] = edge_counter++;
+
+                HE_faceArray_Push(&faceArray, edgeArray.size);
+                int index = edgeArray.size;
+                verArray.array[v1-1].inc_edge_ID = index;
+                verArray.array[v2-1].inc_edge_ID = index+1;
+                verArray.array[v3-1].inc_edge_ID = index+2;
+                HE_edgeArray_Push(&edgeArray, v1-1, 0, faceArray.size-1, index+1, index+2);
+                HE_edgeArray_Push(&edgeArray, v2-1, 0, faceArray.size-1, index+2, index);
+                HE_edgeArray_Push(&edgeArray, v3-1, 0, faceArray.size-1, index, index+1);
+        }
+
+        // Determina os twins dos edges a partir do mapa de relações
+        // Caso não tenha twin, cria um edge novo
+        for(int index = 0; index < edgeArray.size; index++){
+                HE_HalfEdge edgeData = edgeArray.array[index];
+                for(int i = 0; i < verArray.size; i++){
+                        for(int j = 0; j < verArray.size; j++){
+                                if(conMap[i][j] != index)
+                                        continue;
+                                if(conMap[j][i] == -1){
+                                        HE_edgeArray_Push(&edgeArray, j, index, -1, -1, -1);
+                                        conMap[j][i] = edgeArray.size-1;
+                                }
+                                edgeArray.array[index].twin_edge_ID = conMap[j][i];
+                        }
+                }
+        }
+
+        // Percorre os edges por relações para encontrar o previous e o next
+        for(int index = 0; index < edgeArray.size; index++){
+                HE_HalfEdge edgeData = edgeArray.array[index];
+                HE_HalfEdge* array = edgeArray.array;
+                if(edgeData.nextEdge_ID != -1)
+                        continue;
+                edgeArray.array[index].prvsEdge_ID = array[array[array[array[array[index].twin_edge_ID].nextEdge_ID].twin_edge_ID].nextEdge_ID].twin_edge_ID;
+                edgeArray.array[index].nextEdge_ID = array[array[array[array[array[index].twin_edge_ID].prvsEdge_ID].twin_edge_ID].prvsEdge_ID].twin_edge_ID;
+        }
+
+        // DRAW FIGURE
+        float update_scds = 0.3;
+        float cnt = (int)(SDL_GetTicks()/(1000.0f*update_scds))%(edgeArray.size) + 1;
+        int step = 0;
+
+        for(int e = 0; e <= edgeArray.size; e++){
+                if(step == cnt)
+                        break;
+                int originVertex = edgeArray.array[e].origin_vertex_ID;
+                float x1 = verArray.array[originVertex].x;
+                float y1 = verArray.array[originVertex].y;
+
+                int nextEdge = edgeArray.array[e].nextEdge_ID;
+                int nextVertex = edgeArray.array[nextEdge].origin_vertex_ID;
+                float x2 = verArray.array[nextVertex].x;
+                float y2 = verArray.array[nextVertex].y;
+                drawSegmentByLineEquation(x1, y1, x2, y2, 20, (Color_RGBA){1.0f, 1.0f, 0.0f, 0.5f});
+                if (step == cnt-1)
+                        drawSegmentByLineEquation(x1, y1, x2, y2, 20, (Color_RGBA){1.0f, 0.0f, 0.0f, 0.5f});
+                step++;
+        }
+
+        // CLEANUP
+        free_obj(object);
+        free(verArray.array);
+        free(faceArray.array);
+        free(edgeArray.array);
+}
+
 
 void draw(const int step){
         glClear(GL_COLOR_BUFFER_BIT);
@@ -669,15 +673,12 @@ int main(int argc, char** argv) {
         init();
         int quit = FALSE;
         int counter = 0;
-        OBJ object;
         while(quit == FALSE){
-                read_obj("test.obj", &object);
                 input(&quit);
-                //update(&counter);
-                //draw(counter);
-                quit = TRUE;
+                update(&counter);
+                draw(counter);
+                //quit = TRUE;
         }
-        free_obj(object);
         SDL_GL_DeleteContext(glContext);
         SDL_DestroyWindow(glWindow);
         SDL_Quit();
