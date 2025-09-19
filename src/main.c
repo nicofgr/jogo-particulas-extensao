@@ -79,7 +79,7 @@ vec3 camera_pos   = {0.0f, 0.0f,  7.0f};
 vec3 camera_front = {0.0f, 0.0f, -1.0f};
 vec3 camera_up    = {0.0f, 1.0f,  0.0f};
 
-void drawSegmentByLineEquation(float x1, float y1, float x2, float y2, const unsigned int resolution, const Color_RGBA color){
+void drawSegmentByLineEquation(float x1, float y1, float z1, float x2, float y2, float z2, const unsigned int resolution, const Color_RGBA color){
         int a = 0, b = 1; 
         if (x1 == x2){  // Vertical Line
                 swapFloat(&x1, &y1);
@@ -428,54 +428,59 @@ void read_obj(const char* filename, OBJ* objct){
                 exit(1);
         }
 
-        fseek(file, 0, SEEK_END);
-        int file_size = ftell(file);
-        fseek(file, 0, SEEK_SET);
-
         VertexArray vertices = {NULL, 0};
         FaceArray faces = {NULL, 0};
         
         int ch;
         while(1){
                 float x, y, z, w = 1;
-                char v;
+                unsigned int v;
                 Face face = {NULL, 0};
+                int end;
                 ch = fgetc(file);
                 if(ch == EOF)
                         break;
                 switch(ch){
+                        case '#':
+                                while(ch != '\n')
+                                        ch = fgetc(file);
+                                break;
                         case 'v':
                                 fscanf(file, "%f %f %f %f", &x, &y ,&z, &w);
-                                //printf("v %.2f %.2f %.2f %.2f\n", x, y, z, w);
+                                printf("v %.2f %.2f %.2f %.2f\n", x, y, z, w);
                                 vertexArray_Push(&vertices, x, y, z);
                                 break;
                         case 'f':
-                                //printf("f ");
-                                while(fscanf(file, "%c", &v) == 1){
-                                        if(v == '\n')
-                                                break;
-                                        if(v == ' ')
-                                                continue;
-                                        if(v == '/'){
-                                                int aux = fgetc(file);
-                                                while(1){
-                                                        if(aux == '\n' || aux == ' ')
-                                                                break;
-                                                        aux = fgetc(file);
-                                                }
-                                                if(aux == '\n')
+                                end = FALSE;
+                                while(end == FALSE){
+                                        while(fscanf(file, "%u", &v) == 1){
+                                                face_push(&face, v);
+                                                printf("%u ", v);
+                                        }  // Parou no \n ou no '/'
+                                        fseek(file, -1, SEEK_CUR);
+                                        int aux = fgetc(file);
+                                        while(1){
+                                                if(aux == '\n'){
+                                                        end = TRUE;
                                                         break;
-                                                continue;
+                                                }
+                                                if(aux == ' '){
+                                                        break;
+                                                }
+                                                aux = fgetc(file);
                                         }
-                                        face_push(&face, v - '0');
-                                        //printf("%u ", v - '0');
                                 }
-                                //printf("\n");
+                                //fscanf(file, "%u", &v);
+                                //printf("%u ", v);
+                                printf("\n");
                                 face_array_push(&faces, face);
+                                break;
+                        default:
                                 break;
                 }
         }
-        if(0){
+        if(1){
+        printf("\n");
         printf("STRUCTURES\n");
         for(int i = 0; i < vertices.size; i++){
                 float x = vertices.verts[i].x;
@@ -484,7 +489,7 @@ void read_obj(const char* filename, OBJ* objct){
                 printf("v %.2f %.2f %.2f\n", x, y, z);
         }
 
-        printf("Faces\n");
+        printf("Faces %d\n", faces.size);
         for(int i = 0; i < faces.size; i++){
                 printf("f ");
                 for(int j = 0; j < faces.array[i].size; j++){
@@ -611,14 +616,16 @@ void testHE(const char* filename, const int counter){
                 int originVertex = edgeArray.array[e].origin_vertex_ID;
                 float x1 = verArray.array[originVertex].x;
                 float y1 = verArray.array[originVertex].y;
+                float z1 = verArray.array[originVertex].z;
 
                 int nextEdge = edgeArray.array[e].nextEdge_ID;
                 int nextVertex = edgeArray.array[nextEdge].origin_vertex_ID;
                 float x2 = verArray.array[nextVertex].x;
                 float y2 = verArray.array[nextVertex].y;
-                drawSegmentByLineEquation(x1, y1, x2, y2, 20, (Color_RGBA){1.0f, 1.0f, 0.0f, 0.5f});
+                float z2 = verArray.array[nextVertex].z;
+                drawSegmentByLineEquation(x1, y1, z1, x2, y2, z2, 20, (Color_RGBA){1.0f, 1.0f, 0.0f, 0.5f});
                 if (step == cnt-1)
-                        drawSegmentByLineEquation(x1, y1, x2, y2, 20, (Color_RGBA){1.0f, 0.0f, 0.0f, 0.5f});
+                        drawSegmentByLineEquation(x1, y1, z1, x2, y2, z2, 20, (Color_RGBA){1.0f, 0.0f, 0.0f, 0.5f});
                 step++;
         }
 
@@ -632,7 +639,7 @@ void testHE(const char* filename, const int counter){
 
 void draw(const int step){
         glClear(GL_COLOR_BUFFER_BIT);
-        testHE("test.obj", step);
+        testHE("icosahedron.obj", step);
         SDL_GL_SwapWindow(glWindow);
 
         mat4 proj;
