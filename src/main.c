@@ -111,7 +111,7 @@ void drawSegmentByLineEquation(float x1, float y1, float x2, float y2, const uns
   mat4 model;
   glm_mat4_identity(model);
   //glm_scale(model, (vec4){0.2f, 0.2f, 0.2f, 1.0f});
-  glm_rotate(model, (float)SDL_GetTicks()/2000.0f, (vec3){0.0f, 1.0f, 0.0f});
+  //glm_rotate(model, (float)SDL_GetTicks()/2000.0f, (vec3){0.0f, 1.0f, 0.0f});
 
   mat4 view;
   glm_mat4_identity(view);
@@ -154,6 +154,7 @@ void init() {
   SDL_SetRelativeMouseMode(SDL_TRUE);
   glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
   glEnable(GL_PROGRAM_POINT_SIZE);
+  glEnable(GL_MULTISAMPLE);
 
   int success;
   char infoLog[512];
@@ -471,10 +472,18 @@ void input(int * quit){
           break;
       }
     }
-    if(states[SDL_SCANCODE_W])
-      glm_vec3_muladds(camera_front, camera_speed, camera_pos);
-    if(states[SDL_SCANCODE_S])
-      glm_vec3_muladds(camera_front, -camera_speed, camera_pos);
+    if(states[SDL_SCANCODE_W]){
+      vec3 test;
+      glm_vec3_copy(camera_front, test);
+      test[1] = 0.0f;
+      glm_vec3_muladds(test, camera_speed, camera_pos); //pos += (front*spd)
+    }
+    if(states[SDL_SCANCODE_S]){
+      vec3 test;
+      glm_vec3_copy(camera_front, test);
+      test[1] = 0.0f;
+      glm_vec3_muladds(test, -camera_speed, camera_pos);
+    }
     if(states[SDL_SCANCODE_A]){
       vec3 aux;
       glm_vec3_crossn(camera_front, camera_up, aux);
@@ -491,7 +500,14 @@ void input(int * quit){
     SDL_GetRelativeMouseState(&x, &y);
     yaw += x*sensitivity;
     pitch -= y*sensitivity;
-    printf("%d, %d\n", x, y);
+    if(pitch > 89.9f)
+      pitch = 89.9f;
+    if(pitch < -89.9f)
+      pitch = -89.9f;
+    //printf("%d, %d\n", x, y);
+    printf("Pos: %.2f, %.2f, %.2f\n", camera_pos[0], camera_pos[1], camera_pos[2]);
+    printf("Fnt: %.2f, %.2f, %.2f\n", camera_front[0], camera_front[1], camera_front[2]);
+    printf("Up:  %.2f, %.2f, %.2f\n\n", camera_up[0], camera_up[1], camera_up[2]);
 }
 
 int last_frame_time = 0;
@@ -533,6 +549,8 @@ int main(int argc, char** argv) {
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
   SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
   SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+  SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
+  SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 4);
   glWindow = SDL_CreateWindow("OpenGL 3.3", 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_OPENGL);
   if(glWindow == NULL){
     printf("Error creating window\n");
