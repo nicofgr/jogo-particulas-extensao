@@ -267,6 +267,12 @@ typedef struct HE_Edge_Array{
         unsigned int size;
 }HE_Edge_Array;
 
+typedef struct{
+        HE_Vertex_Array vertex_array;
+        HE_Face_Array face_array;
+        HE_Edge_Array edge_array;
+}HE_Object;
+
 void HE_vertexArray_Push(HE_Vertex_Array* verArray, float x, float y, float z, unsigned int inc_edge_ID){
         if(verArray->size == 0){
                 verArray->array = (HE_Vertex*)malloc(sizeof(HE_Vertex));
@@ -496,7 +502,7 @@ void read_obj(const char* filename, OBJ* objct){
                                 break;
                 }
         }
-        if(0){
+        if(1){
         printf("\n");
         printf("STRUCTURES\n");
         for(int i = 0; i < vertices.size; i++){
@@ -532,9 +538,39 @@ void free_obj(OBJ object){
         free(faces.array);
 }
 
+void HE_draw(const HE_Object object){
+        HE_Edge_Array   edgeArray = object.edge_array;
+        HE_Vertex_Array verArray  = object.vertex_array;
+        HE_Face_Array   faceArray = object.face_array;
 
-void testHE(const char* filename, const int counter){
+        float update_scds = 0.3;
+        float cnt = (int)(SDL_GetTicks()/(1000.0f*update_scds))%(edgeArray.size) + 1;
+        int step = 0;
 
+        for(int e = 0; e <= edgeArray.size; e++){
+                if(step == cnt)
+                        break;
+                int originVertex = edgeArray.array[e].origin_vertex_ID;
+                float x1 = verArray.array[originVertex].x;
+                float y1 = verArray.array[originVertex].y;
+                float z1 = verArray.array[originVertex].z;
+
+                int nextEdge = edgeArray.array[e].nextEdge_ID;
+                int nextVertex = edgeArray.array[nextEdge].origin_vertex_ID;
+                float x2 = verArray.array[nextVertex].x;
+                float y2 = verArray.array[nextVertex].y;
+                float z2 = verArray.array[nextVertex].z;
+                //printf("From v%d to v%d\n", originVertex+1, nextVertex+1);
+                //printf("v%d: %.2f %.2f %.2f\n", originVertex+1, x1, y1, z1);
+                //printf("v%d: %.2f %.2f %.2f\n", nextVertex+1, x2, y2, z2);
+                if (step == cnt-1)
+                        drawSegmentByLineEquation(x1, y1, z1, x2, y2, z2, 20, 0.4f, (Color_RGBA){1.0f, 0.0f, 0.0f, 1.0f});
+                drawSegmentByLineEquation(x1, y1, z1, x2, y2, z2, 20, 0.25f, (Color_RGBA){1.0f, 1.0f, 0.0f, 1.0f});
+                step++;
+        }
+}
+
+HE_Object HE_load(const char* filename){
         float x, y, z;
         OBJ object;
         read_obj(filename, &object);
@@ -573,11 +609,11 @@ void testHE(const char* filename, const int counter){
                         conMap[i][j] = -1;
 
 
-
         int* verts;
         int edge_counter = 0;
         for(int i = 0; i < object.face.size; i++){
-                int face_size = object.face.array[i].size;
+                // Getting verts from this face
+                int face_size = object.face.array[i].size; // How many verts on this face
                 verts = (int*) malloc(sizeof(int)*face_size);
                 for(int j = 0; j < face_size; j++){
                         verts[j] = object.face.array[i].vertex_ID[j];
@@ -586,6 +622,7 @@ void testHE(const char* filename, const int counter){
                         conMap[verts[j]-1][verts[(j+1)%face_size]-1] = edge_counter++;
                 }
 
+                // Making new face with verts
                 HE_faceArray_Push(&faceArray, edgeArray.size);
                 int index = edgeArray.size;
                 for(int j = 0; j < face_size; j++){
@@ -625,37 +662,25 @@ void testHE(const char* filename, const int counter){
                 edgeArray.array[index].nextEdge_ID = array[array[array[array[array[index].twin_edge_ID].prvsEdge_ID].twin_edge_ID].prvsEdge_ID].twin_edge_ID;
         }
 
+        free_obj(object);
+        HE_Object ret;
+        ret.edge_array   = edgeArray;
+        ret.vertex_array = verArray;
+        ret.face_array   = faceArray;
+        return ret;
+}
+
+void testHE(const char* filename, const int counter){
+        HE_Object obt = HE_load(filename);
         // DRAW FIGURE
-        float update_scds = 0.3;
-        float cnt = (int)(SDL_GetTicks()/(1000.0f*update_scds))%(edgeArray.size) + 1;
-        int step = 0;
-
-        for(int e = 0; e <= edgeArray.size; e++){
-                if(step == cnt)
-                        break;
-                int originVertex = edgeArray.array[e].origin_vertex_ID;
-                float x1 = verArray.array[originVertex].x;
-                float y1 = verArray.array[originVertex].y;
-                float z1 = verArray.array[originVertex].z;
-
-                int nextEdge = edgeArray.array[e].nextEdge_ID;
-                int nextVertex = edgeArray.array[nextEdge].origin_vertex_ID;
-                float x2 = verArray.array[nextVertex].x;
-                float y2 = verArray.array[nextVertex].y;
-                float z2 = verArray.array[nextVertex].z;
-                //printf("From v%d to v%d\n", originVertex+1, nextVertex+1);
-                //printf("v%d: %.2f %.2f %.2f\n", originVertex+1, x1, y1, z1);
-                //printf("v%d: %.2f %.2f %.2f\n", nextVertex+1, x2, y2, z2);
-                if (step == cnt-1)
-                        drawSegmentByLineEquation(x1, y1, z1, x2, y2, z2, 20, 0.4f, (Color_RGBA){1.0f, 0.0f, 0.0f, 1.0f});
-                drawSegmentByLineEquation(x1, y1, z1, x2, y2, z2, 20, 0.25f, (Color_RGBA){1.0f, 1.0f, 0.0f, 1.0f});
-                step++;
-        }
-
-
+        HE_draw(obt);
+        free(obt.vertex_array.array);
+        free(obt.face_array.array);
+        free(obt.edge_array.array);
 
         // PRINTS
-        if(1){
+        /**
+        if(0){
         printf("Vertices\n");
         for(int i = 0; i < verArray.size; i++){
                 HE_Vertex vert = verArray.array[i];
@@ -675,14 +700,7 @@ void testHE(const char* filename, const int counter){
         }
         printf("\n");
         }
-        
-
-
-        // CLEANUP
-        free_obj(object);
-        free(verArray.array);
-        free(faceArray.array);
-        free(edgeArray.array);
+        **/
 }
 
 
