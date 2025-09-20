@@ -146,64 +146,6 @@ void drawSegmentByLineEquation(float x1, float y1, float z1, float x2, float y2,
 }
 
 
-void init() {
-        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-        glEnable(GL_PROGRAM_POINT_SIZE);
-        glEnable(GL_MULTISAMPLE);
-        glEnable(GL_DEPTH_TEST);
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-        int success;
-        char infoLog[512];
-        vertexShader = glCreateShader(GL_VERTEX_SHADER);
-        glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
-        glCompileShader(vertexShader);
-        glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
-        if(!success){
-                glGetShaderInfoLog(vertexShader, 512, NULL, infoLog);
-                printf("ERROR::SHADER::VERTEX::COMPILATION_FAILED\n %s\n", infoLog);
-                printf("%d\n", glGetError());
-                exit(1);
-        }
-
-        fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-        glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
-        glCompileShader(fragmentShader);
-        glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success);
-        if(!success){
-                glGetShaderInfoLog(fragmentShader, 512, NULL, infoLog);
-                printf("ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n %s\n", infoLog);
-                exit(1);
-        }
-
-        shaderProgram = glCreateProgram();
-        glAttachShader(shaderProgram, vertexShader);
-        glAttachShader(shaderProgram, fragmentShader);
-        glLinkProgram(shaderProgram);
-        glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success);
-        if(!success) {
-                glGetProgramInfoLog(shaderProgram, 512, NULL, infoLog);
-                printf("ERROR::SHADER::PROGRAM::COMPILATION_FAILED\n %s\n", infoLog);
-                exit(1);
-        }
-        glDeleteShader(vertexShader);
-        glDeleteShader(fragmentShader);
-
-
-        glGenVertexArrays(1, &VAO);
-        glGenBuffers(1, &VBO);
-
-
-        glBindVertexArray(VAO);
-        /**
-          glBindBuffer(GL_ARRAY_BUFFER, VBO);
-          glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-         **/
-
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-        glEnableVertexAttribArray(0);
-}
 
 typedef struct Vertex{
         float x;
@@ -310,6 +252,69 @@ void HE_faceArray_Push(HE_Face_Array* faceArray, unsigned int edge_ID){
         faceArray->size++;
 }
 
+HE_Object HE_load(const char* filename);
+HE_Object current_object;
+
+void init() {
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        glEnable(GL_PROGRAM_POINT_SIZE);
+        glEnable(GL_MULTISAMPLE);
+        glEnable(GL_DEPTH_TEST);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+        int success;
+        char infoLog[512];
+        vertexShader = glCreateShader(GL_VERTEX_SHADER);
+        glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
+        glCompileShader(vertexShader);
+        glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
+        if(!success){
+                glGetShaderInfoLog(vertexShader, 512, NULL, infoLog);
+                printf("ERROR::SHADER::VERTEX::COMPILATION_FAILED\n %s\n", infoLog);
+                printf("%d\n", glGetError());
+                exit(1);
+        }
+
+        fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+        glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
+        glCompileShader(fragmentShader);
+        glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success);
+        if(!success){
+                glGetShaderInfoLog(fragmentShader, 512, NULL, infoLog);
+                printf("ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n %s\n", infoLog);
+                exit(1);
+        }
+
+        shaderProgram = glCreateProgram();
+        glAttachShader(shaderProgram, vertexShader);
+        glAttachShader(shaderProgram, fragmentShader);
+        glLinkProgram(shaderProgram);
+        glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success);
+        if(!success) {
+                glGetProgramInfoLog(shaderProgram, 512, NULL, infoLog);
+                printf("ERROR::SHADER::PROGRAM::COMPILATION_FAILED\n %s\n", infoLog);
+                exit(1);
+        }
+        glDeleteShader(vertexShader);
+        glDeleteShader(fragmentShader);
+
+
+        glGenVertexArrays(1, &VAO);
+        glGenBuffers(1, &VBO);
+
+
+        glBindVertexArray(VAO);
+        /**
+          glBindBuffer(GL_ARRAY_BUFFER, VBO);
+          glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+         **/
+
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+        glEnableVertexAttribArray(0);
+
+        current_object = HE_load("test.obj");
+}
 char* opened_file = NULL;
 
 void input(int * quit){
@@ -339,6 +344,10 @@ void input(int * quit){
                                 opened_file = (char*)malloc(sizeof(char)*(strlen(e.drop.file)+1));
                                 strcpy(opened_file, e.drop.file);
                                 printf("File dropped: %s\n", opened_file);
+                                free(current_object.vertex_array.array);
+                                free(current_object.face_array.array);
+                                free(current_object.edge_array.array);
+                                current_object = HE_load(opened_file);
                                 SDL_free(e.drop.file);
                                 break;
                 }
@@ -670,47 +679,10 @@ HE_Object HE_load(const char* filename){
         return ret;
 }
 
-void testHE(const char* filename, const int counter){
-        HE_Object obt = HE_load(filename);
-        // DRAW FIGURE
-        HE_draw(obt);
-        free(obt.vertex_array.array);
-        free(obt.face_array.array);
-        free(obt.edge_array.array);
-
-        // PRINTS
-        /**
-        if(0){
-        printf("Vertices\n");
-        for(int i = 0; i < verArray.size; i++){
-                HE_Vertex vert = verArray.array[i];
-                printf("v%d %.2f %.2f %.2f %d\n", i+1, vert.x, vert.y, vert.z, vert.inc_edge_ID);
-        }
-        printf("\n");
-        printf("Faces\n");
-        for(int i = 0; i < faceArray.size; i++){
-                HE_Face face = faceArray.array[i];
-                printf("f%d %.2d\n", i, face.edge_ID);
-        }
-        printf("\n");
-        printf("Edges\n");
-        for(int i = 0; i < edgeArray.size; i++){
-                HE_HalfEdge edge = edgeArray.array[i];
-                printf("e%.2d v%.2d e%.2d f%.2d e%.2d e%.2d\n", i, edge.origin_vertex_ID+1, edge.twin_edge_ID, edge.inc_face_ID, edge.nextEdge_ID, edge.prvsEdge_ID);
-        }
-        printf("\n");
-        }
-        **/
-}
-
 
 void draw(const int step){
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        if(opened_file != NULL){
-                testHE(opened_file, step);
-        }else{
-                testHE("test.obj", step);
-        }
+        HE_draw(current_object);
         SDL_GL_SwapWindow(glWindow);
 
         mat4 proj;
@@ -761,5 +733,8 @@ int main(int argc, char** argv) {
         SDL_DestroyWindow(glWindow);
         SDL_Quit();
         free(opened_file);
+        free(current_object.vertex_array.array);
+        free(current_object.face_array.array);
+        free(current_object.edge_array.array);
         return 0;
 }
