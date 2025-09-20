@@ -1,3 +1,4 @@
+//
 //#include "cglm/affine-pre.h"
 //#include "cglm/affine-pre.h"
 #include "cglm/affine.h"
@@ -21,6 +22,27 @@
 #include <unistd.h> // for wait time
 #include <cglm/cglm.h>
 
+#include "half_edge.h"
+
+#include "obj_loader.h"
+
+// Nuklear
+#define NK_INCLUDE_FIXED_TYPES
+#define NK_INCLUDE_STANDARD_IO
+#define NK_INCLUDE_STANDARD_VARARGS
+#define NK_INCLUDE_DEFAULT_ALLOCATOR
+#define NK_INCLUDE_VERTEX_BUFFER_OUTPUT
+#define NK_INCLUDE_FONT_BAKING
+#define NK_INCLUDE_DEFAULT_FONT
+#define NK_IMPLEMENTATION
+#define NK_GLFW_GL4_IMPLEMENTATION
+#define NK_KEYSTATE_BASED_INPUT
+#define MAX_VERTEX_BUFFER 512 * 1024
+#define MAX_ELEMENT_BUFFER 128 * 1024
+#include "nuklear/nuklear.h"
+#include "nuklear/nuklear_sdl_gl3.h"
+
+// My defines
 #define SCREEN_WIDTH   600
 #define SCREEN_HEIGHT  600
 #define TRUE  1
@@ -147,115 +169,10 @@ void drawSegmentByLineEquation(float x1, float y1, float z1, float x2, float y2,
         glDrawArrays(GL_POINTS, 0 , resolution);
 }
 
-
-
-typedef struct Vertex{
-        float x;
-        float y;
-        float z;
-}Vertex;
-
-typedef struct VertexArray{
-        Vertex* verts;
-        unsigned int size;
-}VertexArray;
-
-void vertexArray_Push(VertexArray* verArray, float x, float y, float z){
-        if(verArray->size == 0){
-                verArray->verts = (Vertex*)malloc(sizeof(Vertex));
-        }else{
-                verArray->verts = (Vertex*)realloc(verArray->verts, sizeof(Vertex)*(verArray->size+1));
-        }
-        verArray->verts[verArray->size].x = x;
-        verArray->verts[verArray->size].y = y;
-        verArray->verts[verArray->size].z = z;
-        verArray->size++;
-}
-
-// HALF-EDGE IMPLEMENTATION, extract later
-struct HE_Face;
-struct HE_HalfEdge;
-struct HE_Vertex;
-
-typedef struct HE_Vertex{
-        float x;
-        float y;
-        float z;
-        unsigned int inc_edge_ID;
-}HE_Vertex;
-
-typedef struct HE_Face{
-        unsigned int edge_ID;
-}HE_Face;
-
-typedef struct HE_HalfEdge{
-        unsigned int origin_vertex_ID;
-        unsigned int twin_edge_ID;
-        unsigned int inc_face_ID;
-        unsigned int prvsEdge_ID;
-        unsigned int nextEdge_ID;
-}HE_HalfEdge;
-
-typedef struct HE_Vertex_Array{
-        HE_Vertex* array;
-        unsigned int size;
-}HE_Vertex_Array;
-
-typedef struct HE_Face_Array{
-        HE_Face* array;
-        unsigned int size;
-}HE_Face_Array;
-
-typedef struct HE_Edge_Array{
-        HE_HalfEdge* array;
-        unsigned int size;
-}HE_Edge_Array;
-
-typedef struct{
-        HE_Vertex_Array vertex_array;
-        HE_Face_Array face_array;
-        HE_Edge_Array edge_array;
-}HE_Object;
-
-void HE_vertexArray_Push(HE_Vertex_Array* verArray, float x, float y, float z, unsigned int inc_edge_ID){
-        if(verArray->size == 0){
-                verArray->array = (HE_Vertex*)malloc(sizeof(HE_Vertex));
-        }else{
-                verArray->array = (HE_Vertex*)realloc(verArray->array, sizeof(HE_Vertex)*(verArray->size+1));
-        }
-        verArray->array[verArray->size].x = x;
-        verArray->array[verArray->size].y = y;
-        verArray->array[verArray->size].z = z;
-        verArray->array[verArray->size].inc_edge_ID = inc_edge_ID;
-        verArray->size++;
-}
-
-void HE_edgeArray_Push(HE_Edge_Array* edgeArray, unsigned int origin_vertex_ID, unsigned int twin_ID, unsigned int inc_face_ID, unsigned int nextEdge_ID, unsigned int prvsEdge_ID){
-        if(edgeArray->size == 0){
-                edgeArray->array = (HE_HalfEdge*)malloc(sizeof(HE_HalfEdge));
-        }else{
-                edgeArray->array = (HE_HalfEdge*)realloc(edgeArray->array, sizeof(HE_HalfEdge)*(edgeArray->size+1));
-        }
-        edgeArray->array[edgeArray->size].origin_vertex_ID = origin_vertex_ID;
-        edgeArray->array[edgeArray->size].twin_edge_ID = twin_ID;
-        edgeArray->array[edgeArray->size].inc_face_ID = inc_face_ID;
-        edgeArray->array[edgeArray->size].prvsEdge_ID = prvsEdge_ID;
-        edgeArray->array[edgeArray->size].nextEdge_ID = nextEdge_ID;
-        edgeArray->size++;
-}
-
-void HE_faceArray_Push(HE_Face_Array* faceArray, unsigned int edge_ID){
-        if(faceArray->size == 0){
-                faceArray->array = (HE_Face*)malloc(sizeof(HE_Face));
-        }else{
-                faceArray->array = (HE_Face*)realloc(faceArray->array, sizeof(HE_Face)*(faceArray->size+1));
-        }
-        faceArray->array[faceArray->size].edge_ID = edge_ID;
-        faceArray->size++;
-}
-
-HE_Object HE_load(const char* filename);
 HE_Object current_object;
+char* opened_file = NULL;
+int last_frame_time = 0;
+int lastTime = 0;
 
 void init() {
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
@@ -317,7 +234,6 @@ void init() {
 
         current_object = HE_load("test.obj");
 }
-char* opened_file = NULL;
 
 void input(int * quit){
         SDL_Event e;
@@ -395,9 +311,6 @@ void input(int * quit){
         }
 }
 
-int last_frame_time = 0;
-int lastTime = 0;
-
 void update(int* step){
 
         int wait_time = FRAME_TARGET_TIME - (SDL_GetTicks() - last_frame_time);
@@ -419,135 +332,6 @@ typedef struct{
         char* string;
         unsigned int size;
 } String;
-
-typedef struct{
-        unsigned int* vertex_ID;
-        unsigned int size;
-}Face;
-
-typedef struct{
-        Face* array;
-        unsigned int size;
-}FaceArray;
-
-typedef struct{
-        VertexArray vertex;
-        FaceArray   face;
-} OBJ;
-
-void face_array_push(FaceArray* faceArray, const Face face){
-        if(faceArray->size == 0){
-                faceArray->array = (Face*)malloc(sizeof(Face));
-        }else{
-                faceArray->array = (Face*)realloc(faceArray->array, sizeof(Face)*(faceArray->size+1));
-        }
-        faceArray->array[faceArray->size] = face;
-        faceArray->size++;
-}
-
-void face_push(Face* face, unsigned int vertex_ID){
-        if(face->size == 0){
-                face->vertex_ID = (unsigned int*)malloc(sizeof(unsigned int));
-        }else{
-                face->vertex_ID = (unsigned int*)realloc(face->vertex_ID, sizeof(unsigned int)*(face->size+1));
-        }
-        face->vertex_ID[face->size] = vertex_ID;
-        face->size++;
-}
-
-void read_obj(const char* filename, OBJ* objct){
-        FILE* file = fopen(filename, "r");
-        if(file == NULL){
-                printf("File %s could not be opened\n", filename);
-                exit(1);
-        }
-
-        VertexArray vertices = {NULL, 0};
-        FaceArray faces = {NULL, 0};
-        
-        int ch;
-        while(1){
-                float x, y, z, w = 1;
-                unsigned int v;
-                Face face = {NULL, 0};
-                int end;
-                ch = fgetc(file);
-                if(ch == EOF)
-                        break;
-                switch(ch){
-                        case '#':
-                                while(ch != '\n')
-                                        ch = fgetc(file);
-                                break;
-                        case 'v':
-                                fscanf(file, "%f %f %f %f", &x, &y ,&z, &w);
-                                //printf("v %.2f %.2f %.2f %.2f\n", x, y, z, w);
-                                vertexArray_Push(&vertices, x, y, z);
-                                break;
-                        case 'f':
-                                end = FALSE;
-                                while(end == FALSE){
-                                        while(fscanf(file, "%u", &v) == 1){
-                                                face_push(&face, v);
-                                                //printf("%u ", v);
-                                        }  // Parou no \n ou no '/'
-                                        fseek(file, -1, SEEK_CUR);
-                                        int aux = fgetc(file);
-                                        while(1){
-                                                if(aux == '\n'){
-                                                        end = TRUE;
-                                                        break;
-                                                }
-                                                if(aux == ' '){
-                                                        break;
-                                                }
-                                                aux = fgetc(file);
-                                        }
-                                }
-                                //fscanf(file, "%u", &v);
-                                //printf("%u ", v);
-                                //printf("\n");
-                                face_array_push(&faces, face);
-                                break;
-                        default:
-                                break;
-                }
-        }
-        if(1){
-        printf("\n");
-        printf("STRUCTURES\n");
-        for(int i = 0; i < vertices.size; i++){
-                float x = vertices.verts[i].x;
-                float y = vertices.verts[i].y;
-                float z = vertices.verts[i].z;
-                printf("v %.2f %.2f %.2f\n", x, y, z);
-        }
-
-        printf("Faces %d\n", faces.size);
-        for(int i = 0; i < faces.size; i++){
-                printf("f ");
-                for(int j = 0; j < faces.array[i].size; j++){
-                        printf("%u ", faces.array[i].vertex_ID[j]);
-                }
-                printf("\n");
-        }
-        }
-        
-        objct->face   = faces;
-        objct->vertex = vertices;
-
-        fclose(file);
-}
-
-void free_obj(OBJ object){
-        FaceArray faces      = object.face;
-        VertexArray vertices = object.vertex;
-        for(int i = 0; i < faces.size; i++){
-                free(faces.array[i].vertex_ID);
-        }
-        free(vertices.verts);
-        free(faces.array);
-}
 
 void HE_draw(const HE_Object object){
         HE_Edge_Array   edgeArray = object.edge_array;
@@ -580,107 +364,6 @@ void HE_draw(const HE_Object object){
                 step++;
         }
 }
-
-HE_Object HE_load(const char* filename){
-        float x, y, z;
-        OBJ object;
-        read_obj(filename, &object);
-
-        HE_Vertex_Array verArray  = {NULL, 0};
-        HE_Face_Array   faceArray = {NULL, 0};
-        HE_Edge_Array   edgeArray = {NULL, 0};
-
-        // Carrega os vértices
-        for(int i = 0; i < object.vertex.size; i++){
-                x = object.vertex.verts[i].x;
-                y = object.vertex.verts[i].y;
-                z = object.vertex.verts[i].z;
-                HE_vertexArray_Push(&verArray, x, y, z, 0);
-        }
-        // Centering model in local space
-        float sumX = 0;
-        float sumY = 0;
-        float sumZ = 0;
-        for(int i = 0; i < verArray.size; i++){
-                sumX += verArray.array[i].x; 
-                sumY += verArray.array[i].y; 
-                sumZ += verArray.array[i].z; 
-        }
-        for(int i = 0; i < verArray.size; i++){
-                verArray.array[i].x -= (sumX/verArray.size);
-                verArray.array[i].y -= (sumY/verArray.size);
-                verArray.array[i].z -= (sumZ/verArray.size);
-        }
-
-        // -----------
-        int conMap [verArray.size][verArray.size];
-
-        for(int i = 0; i < verArray.size; i++)
-                for(int j = 0; j < verArray.size; j++)
-                        conMap[i][j] = -1;
-
-
-        int* verts;
-        int edge_counter = 0;
-        for(int i = 0; i < object.face.size; i++){
-                // Getting verts from this face
-                int face_size = object.face.array[i].size; // How many verts on this face
-                verts = (int*) malloc(sizeof(int)*face_size);
-                for(int j = 0; j < face_size; j++){
-                        verts[j] = object.face.array[i].vertex_ID[j];
-                }
-                for(int j = 0; j < face_size; j++){
-                        conMap[verts[j]-1][verts[(j+1)%face_size]-1] = edge_counter++;
-                }
-
-                // Making new face with verts
-                HE_faceArray_Push(&faceArray, edgeArray.size);
-                int index = edgeArray.size;
-                for(int j = 0; j < face_size; j++){
-                        verArray.array[verts[j]-1].inc_edge_ID = index+j;
-                }
-
-                for(int j = 0; j < face_size; j++){
-                        HE_edgeArray_Push(&edgeArray, verts[j]-1, 0, faceArray.size-1, index+((j+1)%face_size), index+((j+2)%face_size));
-                }
-                free(verts);
-        }
-
-        // Determina os twins dos edges a partir do mapa de relações
-        // Caso não tenha twin, cria um edge novo
-        for(int index = 0; index < edgeArray.size; index++){
-                HE_HalfEdge edgeData = edgeArray.array[index];
-                for(int i = 0; i < verArray.size; i++){
-                        for(int j = 0; j < verArray.size; j++){
-                                if(conMap[i][j] != index)
-                                        continue;
-                                if(conMap[j][i] == -1){
-                                        HE_edgeArray_Push(&edgeArray, j, index, -1, -1, -1);
-                                        conMap[j][i] = edgeArray.size-1;
-                                }
-                                edgeArray.array[index].twin_edge_ID = conMap[j][i];
-                        }
-                }
-        }
-
-        // Percorre os edges por relações para encontrar o previous e o next
-        for(int index = 0; index < edgeArray.size; index++){
-                HE_HalfEdge edgeData = edgeArray.array[index];
-                HE_HalfEdge* array = edgeArray.array;
-                if(edgeData.nextEdge_ID != -1)
-                        continue;
-                edgeArray.array[index].prvsEdge_ID = array[array[array[array[array[index].twin_edge_ID].nextEdge_ID].twin_edge_ID].nextEdge_ID].twin_edge_ID;
-                edgeArray.array[index].nextEdge_ID = array[array[array[array[array[index].twin_edge_ID].prvsEdge_ID].twin_edge_ID].prvsEdge_ID].twin_edge_ID;
-        }
-
-        free_obj(object);
-        HE_Object ret;
-        ret.edge_array   = edgeArray;
-        ret.vertex_array = verArray;
-        ret.face_array   = faceArray;
-        return ret;
-}
-
 
 void draw(const int step){
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
