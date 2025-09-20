@@ -19,7 +19,7 @@
 #include <unistd.h> // for wait time
 #include <cglm/cglm.h>
 
-#define SCREEN_WIDTH   800
+#define SCREEN_WIDTH   600
 #define SCREEN_HEIGHT  600
 #define TRUE  1
 #define FALSE 0
@@ -37,10 +37,11 @@ const char *vertexShaderSource = "#version 330 core\n"
 "uniform mat4 model;\n"
 "uniform mat4 view;\n"
 "uniform mat4 projection;\n"
+"uniform float sizeMultiplier;\n"
 "void main()\n"
 "{\n"
 "   gl_Position = projection*view*model*vec4(aPos.x, aPos.y, aPos.z, 1.0);\n"
-"   gl_PointSize = min(50/gl_Position.z, 400.0f);\n"
+"   gl_PointSize = min((50*sizeMultiplier)/gl_Position.z, 400.0f);\n"
 "}\0";
 
 const char *fragmentShaderSource = "#version 330 core\n"
@@ -48,7 +49,6 @@ const char *fragmentShaderSource = "#version 330 core\n"
 "uniform vec4 ourColor;\n"
 "void main()\n"
 "{\n"
-"   FragColor = vec4(1.0f, 0.5f, 0.2f, 1.0f);\n"
 "   FragColor = ourColor;\n"
 "}\0";
 
@@ -79,39 +79,32 @@ vec3 camera_pos   = {0.0f, 0.0f,  7.0f};
 vec3 camera_front = {0.0f, 0.0f, -1.0f};
 vec3 camera_up    = {0.0f, 1.0f,  0.0f};
 
-void drawSegmentByLineEquation(float x1, float y1, float z1, float x2, float y2, float z2, const unsigned int resolution, const Color_RGBA color){
-        int a = 0, b = 1; 
-        if (x1 == x2){  // Vertical Line
-                swapFloat(&x1, &y1);
-                swapFloat(&x2, &y2);
-                a = 1;
-                b = 0;
-        }
-        if ((x1 > x2)){   // Drawing from right to left
-                swapFloat(&x1, &x2);
-                swapFloat(&y1, &y2);
-        }
-        float dx = (x2 - x1);
-        float dy = (y2 - y1);
-        float m = dy / dx;
+void drawSegmentByLineEquation(float x1, float y1, float z1, float x2, float y2, float z2, const unsigned int resolution, const float point_size_multiplier, const Color_RGBA color){
+        float a = x2-x1;
+        float b = y2-y1;
+        float c = z2-z1;
+
         float x = x1;
         float y = y1;
+        float z = z1;
 
         float verts[(resolution*3)+3];
-
-        float step = dx / (resolution-1);
-        int i = 0;
-        for (i = 0; i <= resolution-1; i++) { // From 0 till res-1
-                verts[i*3 + a] = x;
-                verts[i*3 + b] = y;
-                verts[i*3 + 2] = 0.0f;
-                x += step;
-                y += m*step;
+        float step = 1.0f / (resolution-1);
+        for (int i = 0; i <= resolution-1; i++) { // From 0 till res-1
+                //printf("%.2f %.2f %.2f\n", x, y, z);
+                verts[i*3 + 0] = x;
+                verts[i*3 + 1] = y;
+                verts[i*3 + 2] = z;
+                x += step*a;
+                y += step*b;
+                z += step*c;
         }
+        //printf("\n");
+
         mat4 model;
         glm_mat4_identity(model);
         //glm_scale(model, (vec4){0.2f, 0.2f, 0.2f, 1.0f});
-        //glm_rotate(model, (float)SDL_GetTicks()/2000.0f, (vec3){0.0f, 1.0f, 0.0f});
+        glm_rotate(model, (float)SDL_GetTicks()/2000.0f, (vec3){0.0f, 1.0f, 0.0f});
 
         mat4 view;
         glm_mat4_identity(view);
@@ -134,11 +127,13 @@ void drawSegmentByLineEquation(float x1, float y1, float z1, float x2, float y2,
         int transformLocation   = glGetUniformLocation(shaderProgram, "model");
         int viewLocation        = glGetUniformLocation(shaderProgram, "view");
         int projLocation        = glGetUniformLocation(shaderProgram, "projection");
+        int sizeMultiplier        = glGetUniformLocation(shaderProgram, "sizeMultiplier");
         glUseProgram(shaderProgram);
         glUniform4f(vertexColorLocation, color.R, color.G, color.B, color.A);
         glUniformMatrix4fv(transformLocation, 1, GL_FALSE, (const float*)model);
         glUniformMatrix4fv(viewLocation, 1, GL_FALSE, (const float*)view);
         glUniformMatrix4fv(projLocation, 1, GL_FALSE, (const float*)proj);
+        glUniform1f(sizeMultiplier, point_size_multiplier);
         glBindVertexArray(VAO);
         glBindBuffer(GL_ARRAY_BUFFER, VBO);
         glBufferData(GL_ARRAY_BUFFER, sizeof(verts), verts, GL_STATIC_DRAW);
@@ -151,10 +146,12 @@ void drawSegmentByLineEquation(float x1, float y1, float z1, float x2, float y2,
 
 
 void init() {
-        SDL_SetRelativeMouseMode(SDL_TRUE);
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glEnable(GL_PROGRAM_POINT_SIZE);
         glEnable(GL_MULTISAMPLE);
+        glEnable(GL_DEPTH_TEST);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
         int success;
         char infoLog[512];
@@ -306,8 +303,6 @@ void HE_faceArray_Push(HE_Face_Array* faceArray, unsigned int edge_ID){
         faceArray->size++;
 }
 
-
-
 void input(int * quit){
         SDL_Event e;
         const float camera_speed = 0.1f;
@@ -320,6 +315,14 @@ void input(int * quit){
                         case SDL_KEYDOWN:
                                 if(e.key.keysym.sym == SDLK_ESCAPE)
                                         *quit = TRUE;
+                                if(e.key.keysym.sym == SDLK_TAB){
+                                        if(SDL_GetRelativeMouseMode() == SDL_TRUE){
+                                                SDL_SetRelativeMouseMode(SDL_FALSE);
+                                        }else{
+                                                SDL_SetRelativeMouseMode(SDL_TRUE);
+                                                SDL_GetRelativeMouseState(NULL, NULL);
+                                        }
+                                }
                                 break;  
                 }
         }
@@ -348,14 +351,15 @@ void input(int * quit){
 
         const float sensitivity = 0.25;
         int x = 0, y = 0;
-        SDL_GetRelativeMouseState(&x, &y);
+        if(SDL_GetRelativeMouseMode() == SDL_TRUE)
+                SDL_GetRelativeMouseState(&x, &y);
         yaw += x*sensitivity;
         pitch -= y*sensitivity;
         if(pitch > 89.9f)
                 pitch = 89.9f;
         if(pitch < -89.9f)
                 pitch = -89.9f;
-        //printf("%d, %d\n", x, y);
+        printf("%d, %d\n", x, y);
         printf("Pos: %.2f, %.2f, %.2f\n", camera_pos[0], camera_pos[1], camera_pos[2]);
         printf("Fnt: %.2f, %.2f, %.2f\n", camera_front[0], camera_front[1], camera_front[2]);
         printf("Up:  %.2f, %.2f, %.2f\n\n", camera_up[0], camera_up[1], camera_up[2]);
@@ -447,7 +451,7 @@ void read_obj(const char* filename, OBJ* objct){
                                 break;
                         case 'v':
                                 fscanf(file, "%f %f %f %f", &x, &y ,&z, &w);
-                                printf("v %.2f %.2f %.2f %.2f\n", x, y, z, w);
+                                //printf("v %.2f %.2f %.2f %.2f\n", x, y, z, w);
                                 vertexArray_Push(&vertices, x, y, z);
                                 break;
                         case 'f':
@@ -455,7 +459,7 @@ void read_obj(const char* filename, OBJ* objct){
                                 while(end == FALSE){
                                         while(fscanf(file, "%u", &v) == 1){
                                                 face_push(&face, v);
-                                                printf("%u ", v);
+                                                //printf("%u ", v);
                                         }  // Parou no \n ou no '/'
                                         fseek(file, -1, SEEK_CUR);
                                         int aux = fgetc(file);
@@ -472,14 +476,14 @@ void read_obj(const char* filename, OBJ* objct){
                                 }
                                 //fscanf(file, "%u", &v);
                                 //printf("%u ", v);
-                                printf("\n");
+                                //printf("\n");
                                 face_array_push(&faces, face);
                                 break;
                         default:
                                 break;
                 }
         }
-        if(1){
+        if(0){
         printf("\n");
         printf("STRUCTURES\n");
         for(int i = 0; i < vertices.size; i++){
@@ -532,7 +536,6 @@ void testHE(const char* filename, const int counter){
                 z = object.vertex.verts[i].z;
                 HE_vertexArray_Push(&verArray, x, y, z, 0);
         }
-
         // Centering model in local space
         float sumX = 0;
         float sumY = 0;
@@ -623,9 +626,12 @@ void testHE(const char* filename, const int counter){
                 float x2 = verArray.array[nextVertex].x;
                 float y2 = verArray.array[nextVertex].y;
                 float z2 = verArray.array[nextVertex].z;
-                drawSegmentByLineEquation(x1, y1, z1, x2, y2, z2, 20, (Color_RGBA){1.0f, 1.0f, 0.0f, 0.5f});
+                //printf("From v%d to v%d\n", originVertex+1, nextVertex+1);
+                //printf("v%d: %.2f %.2f %.2f\n", originVertex+1, x1, y1, z1);
+                //printf("v%d: %.2f %.2f %.2f\n", nextVertex+1, x2, y2, z2);
                 if (step == cnt-1)
-                        drawSegmentByLineEquation(x1, y1, z1, x2, y2, z2, 20, (Color_RGBA){1.0f, 0.0f, 0.0f, 0.5f});
+                        drawSegmentByLineEquation(x1, y1, z1, x2, y2, z2, 20, 0.4f, (Color_RGBA){1.0f, 0.0f, 0.0f, 1.0f});
+                drawSegmentByLineEquation(x1, y1, z1, x2, y2, z2, 20, 0.25f, (Color_RGBA){1.0f, 1.0f, 0.0f, 1.0f});
                 step++;
         }
 
@@ -638,7 +644,7 @@ void testHE(const char* filename, const int counter){
 
 
 void draw(const int step){
-        glClear(GL_COLOR_BUFFER_BIT);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         testHE("icosahedron.obj", step);
         SDL_GL_SwapWindow(glWindow);
 
