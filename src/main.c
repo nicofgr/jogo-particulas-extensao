@@ -15,6 +15,7 @@
 #include <SDL2/SDL_video.h>
 #include <glad/glad.h>
 #include <stdatomic.h>
+#include <string.h>
 #include <sys/types.h>
 #include <unistd.h> // for wait time
 #include <cglm/cglm.h>
@@ -303,6 +304,8 @@ void HE_faceArray_Push(HE_Face_Array* faceArray, unsigned int edge_ID){
         faceArray->size++;
 }
 
+char* opened_file = NULL;
+
 void input(int * quit){
         SDL_Event e;
         const float camera_speed = 0.1f;
@@ -324,6 +327,14 @@ void input(int * quit){
                                         }
                                 }
                                 break;  
+                        case SDL_DROPFILE:
+                                if(opened_file != NULL)
+                                        free(opened_file);
+                                opened_file = (char*)malloc(sizeof(char)*(strlen(e.drop.file)+1));
+                                strcpy(opened_file, e.drop.file);
+                                printf("File dropped: %s\n", opened_file);
+                                SDL_free(e.drop.file);
+                                break;
                 }
         }
         if(states[SDL_SCANCODE_W]){
@@ -359,10 +370,12 @@ void input(int * quit){
                 pitch = 89.9f;
         if(pitch < -89.9f)
                 pitch = -89.9f;
+        if(0){
         printf("%d, %d\n", x, y);
         printf("Pos: %.2f, %.2f, %.2f\n", camera_pos[0], camera_pos[1], camera_pos[2]);
         printf("Fnt: %.2f, %.2f, %.2f\n", camera_front[0], camera_front[1], camera_front[2]);
         printf("Up:  %.2f, %.2f, %.2f\n\n", camera_up[0], camera_up[1], camera_up[2]);
+        }
 }
 
 int last_frame_time = 0;
@@ -519,6 +532,7 @@ void free_obj(OBJ object){
         free(faces.array);
 }
 
+
 void testHE(const char* filename, const int counter){
 
         float x, y, z;
@@ -560,25 +574,28 @@ void testHE(const char* filename, const int counter){
 
 
 
-        int v1, v2, v3;
+        int* verts;
         int edge_counter = 0;
         for(int i = 0; i < object.face.size; i++){
-                v1 = object.face.array[i].vertex_ID[0];
-                v2 = object.face.array[i].vertex_ID[1];
-                v3 = object.face.array[i].vertex_ID[2];
-
-                conMap[v1-1][v2-1] = edge_counter++;
-                conMap[v2-1][v3-1] = edge_counter++;
-                conMap[v3-1][v1-1] = edge_counter++;
+                int face_size = object.face.array[i].size;
+                verts = (int*) malloc(sizeof(int)*face_size);
+                for(int j = 0; j < face_size; j++){
+                        verts[j] = object.face.array[i].vertex_ID[j];
+                }
+                for(int j = 0; j < face_size; j++){
+                        conMap[verts[j]-1][verts[(j+1)%face_size]-1] = edge_counter++;
+                }
 
                 HE_faceArray_Push(&faceArray, edgeArray.size);
                 int index = edgeArray.size;
-                verArray.array[v1-1].inc_edge_ID = index;
-                verArray.array[v2-1].inc_edge_ID = index+1;
-                verArray.array[v3-1].inc_edge_ID = index+2;
-                HE_edgeArray_Push(&edgeArray, v1-1, 0, faceArray.size-1, index+1, index+2);
-                HE_edgeArray_Push(&edgeArray, v2-1, 0, faceArray.size-1, index+2, index);
-                HE_edgeArray_Push(&edgeArray, v3-1, 0, faceArray.size-1, index, index+1);
+                for(int j = 0; j < face_size; j++){
+                        verArray.array[verts[j]-1].inc_edge_ID = index+j;
+                }
+
+                for(int j = 0; j < face_size; j++){
+                        HE_edgeArray_Push(&edgeArray, verts[j]-1, 0, faceArray.size-1, index+((j+1)%face_size), index+((j+2)%face_size));
+                }
+                free(verts);
         }
 
         // Determina os twins dos edges a partir do mapa de relações
@@ -635,6 +652,32 @@ void testHE(const char* filename, const int counter){
                 step++;
         }
 
+
+
+        // PRINTS
+        if(1){
+        printf("Vertices\n");
+        for(int i = 0; i < verArray.size; i++){
+                HE_Vertex vert = verArray.array[i];
+                printf("v%d %.2f %.2f %.2f %d\n", i+1, vert.x, vert.y, vert.z, vert.inc_edge_ID);
+        }
+        printf("\n");
+        printf("Faces\n");
+        for(int i = 0; i < faceArray.size; i++){
+                HE_Face face = faceArray.array[i];
+                printf("f%d %.2d\n", i, face.edge_ID);
+        }
+        printf("\n");
+        printf("Edges\n");
+        for(int i = 0; i < edgeArray.size; i++){
+                HE_HalfEdge edge = edgeArray.array[i];
+                printf("e%.2d v%.2d e%.2d f%.2d e%.2d e%.2d\n", i, edge.origin_vertex_ID+1, edge.twin_edge_ID, edge.inc_face_ID, edge.nextEdge_ID, edge.prvsEdge_ID);
+        }
+        printf("\n");
+        }
+        
+
+
         // CLEANUP
         free_obj(object);
         free(verArray.array);
@@ -645,7 +688,11 @@ void testHE(const char* filename, const int counter){
 
 void draw(const int step){
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        testHE("icosahedron.obj", step);
+        if(opened_file != NULL){
+                testHE(opened_file, step);
+        }else{
+                testHE("test.obj", step);
+        }
         SDL_GL_SwapWindow(glWindow);
 
         mat4 proj;
@@ -695,5 +742,6 @@ int main(int argc, char** argv) {
         SDL_GL_DeleteContext(glContext);
         SDL_DestroyWindow(glWindow);
         SDL_Quit();
+        free(opened_file);
         return 0;
 }
