@@ -1,4 +1,5 @@
 //#include "cglm/affine-pre.h"
+//#include "cglm/affine-pre.h"
 #include "cglm/affine.h"
 #include "cglm/mat4.h"
 #include "cglm/types.h"
@@ -104,7 +105,8 @@ void drawSegmentByLineEquation(float x1, float y1, float z1, float x2, float y2,
 
         mat4 model;
         glm_mat4_identity(model);
-        //glm_scale(model, (vec4){0.2f, 0.2f, 0.2f, 1.0f});
+        //glm_scale(model, (vec4){0.1f, 0.1f, 0.1f, 1.0f});
+        //glm_translate(model, (vec3){0.0f, -20.0f, 0.0f});
         glm_rotate(model, (float)SDL_GetTicks()/2000.0f, (vec3){0.0f, 1.0f, 0.0f});
 
         mat4 view;
@@ -552,8 +554,8 @@ void HE_draw(const HE_Object object){
         HE_Vertex_Array verArray  = object.vertex_array;
         HE_Face_Array   faceArray = object.face_array;
 
-        float update_scds = 0.3;
-        float cnt = (int)(SDL_GetTicks()/(1000.0f*update_scds))%(edgeArray.size) + 1;
+        float scds = 10;  // Time to draw whole figure
+        float cnt = (int)(SDL_GetTicks()/((scds*1000.0f)/edgeArray.size))%(edgeArray.size) + 1;
         int step = 0;
 
         for(int e = 0; e <= edgeArray.size; e++){
