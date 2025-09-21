@@ -160,7 +160,35 @@ unsigned int* HE_get_object_faces_as_array(HE_Object object, int* size){
         *size = counter;
         return output;
 }
+
+int HE_get_next_edge(HE_Edge_Array edge_array, int index){   // NEEDS REFACTORING
+        int starting_edge = index;
+        int next_edge_ID = edge_array.array[index].nextEdge_ID;
+        if(next_edge_ID != -1)
+                return next_edge_ID;
+
+        int edge_twin = edge_array.array[starting_edge].twin_edge_ID;
+        int edge_twin_prev = edge_array.array[edge_twin].prvsEdge_ID;
+        int edge_twin_prev_twin = edge_array.array[edge_twin_prev].twin_edge_ID; // Poss Candidate
+
+        int candidate_prev = edge_array.array[edge_twin_prev_twin].prvsEdge_ID;
+        if(candidate_prev == -1){
+                return edge_twin_prev_twin;
+        }
+        while(edge_twin_prev != starting_edge){
+                edge_twin_prev = edge_array.array[edge_twin_prev_twin].prvsEdge_ID;
+                edge_twin_prev_twin = edge_array.array[edge_twin_prev].twin_edge_ID; // Poss Candidate
+                                                                                         //
+                int candidate_prev = edge_array.array[edge_twin_prev_twin].prvsEdge_ID;
+                if(candidate_prev == -1){
+                        return edge_twin_prev_twin;
+                }
+        }
+        return -1;
+}
+
 HE_Object HE_load(const char* filename){
+        int debug_counter = 0;
         float x, y, z;
         OBJ object;
         read_obj(filename, &object);
@@ -242,22 +270,52 @@ HE_Object HE_load(const char* filename){
                 }
         }
 
+        printf("HELLO %d\n", ++debug_counter);   // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< AQUI
+        fflush(stdout);
         // Percorre os edges por relações para encontrar o previous e o next
+        
         for(int index = 0; index < edgeArray.size; index++){
                 HE_HalfEdge edgeData = edgeArray.array[index];
                 HE_HalfEdge* array = edgeArray.array;
-                if(edgeData.nextEdge_ID != -1)
-                        continue;
-                edgeArray.array[index].prvsEdge_ID = array[array[array[array[array[index].twin_edge_ID].nextEdge_ID].twin_edge_ID].nextEdge_ID].twin_edge_ID;
-                edgeArray.array[index].nextEdge_ID = array[array[array[array[array[index].twin_edge_ID].prvsEdge_ID].twin_edge_ID].prvsEdge_ID].twin_edge_ID;
+                if(edgeData.nextEdge_ID == -1){
+                        int nextEdge_ID = HE_get_next_edge(edgeArray, index);
+                        edgeArray.array[index].nextEdge_ID = nextEdge_ID;
+                        edgeArray.array[nextEdge_ID].prvsEdge_ID = index;
+                }
         }
 
-        free_obj(object);
-        HE_Object ret;
-        ret.edge_array   = edgeArray;
-        ret.vertex_array = verArray;
-        ret.face_array   = faceArray;
-        return ret;
+        printf("HELLO %d\n", ++debug_counter);   // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+        fflush(stdout);
+
+          // PRINTS
+        if(1){
+        printf("Vertices\n");
+        for(int i = 0; i < verArray.size; i++){
+                HE_Vertex vert = verArray.array[i];
+                printf("%d %.2f %.2f %.2f %d\n", i, vert.x, vert.y, vert.z, vert.inc_edge_ID);
+        }
+        printf("\n");
+        printf("Faces\n");
+        for(int i = 0; i < faceArray.size; i++){
+                HE_Face face = faceArray.array[i];
+                printf("%d %.2d\n", i, face.edge_ID);
+        }
+        printf("\n");
+        printf("Edges\n");
+        for(int i = 0; i < edgeArray.size; i++){
+                HE_HalfEdge edge = edgeArray.array[i];
+                printf("%.2d %.2d %.2d %.2d %.2d %.2d\n", i, edge.origin_vertex_ID+1, edge.twin_edge_ID, edge.inc_face_ID, edge.nextEdge_ID, edge.prvsEdge_ID);
+        }
+        printf("\n");
+        }
+
+// Cleaning
+free_obj(object);
+HE_Object ret;
+ret.edge_array   = edgeArray;
+ret.vertex_array = verArray;
+ret.face_array   = faceArray;
+return ret;
 }
 
 #endif

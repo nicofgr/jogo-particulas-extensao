@@ -90,6 +90,10 @@ void read_obj(const char* filename, OBJ* objct){
                                         ch = fgetc(file);
                                 break;
                         case 'v':
+                                ch = fgetc(file);
+                                fseek(file, -1, SEEK_CUR);
+                                if(ch == 't' || ch == 'n')
+                                        break;
                                 fscanf(file, "%f %f %f %f", &x, &y ,&z, &w);
                                 //printf("v %.2f %.2f %.2f %.2f\n", x, y, z, w);
                                 vertexArray_Push(&vertices, x, y, z);
@@ -123,7 +127,7 @@ void read_obj(const char* filename, OBJ* objct){
                                 break;
                 }
         }
-        if(0){
+        if(1){
         printf("\n");
         printf("STRUCTURES\n");
         for(int i = 0; i < vertices.size; i++){
@@ -147,6 +151,8 @@ void read_obj(const char* filename, OBJ* objct){
         objct->vertex = vertices;
 
         fclose(file);
+        printf("File %s successfully read\n", filename);
+        fflush(stdout);
 }
 
 void free_obj(OBJ object){
