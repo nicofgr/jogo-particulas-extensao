@@ -274,8 +274,30 @@ void draw_adjacent_face_from_face(const int face){
 }
 
 void draw_adjacent_face_from_edge(const int edge){
+        HE_Edge_Array edge_array = current_object.edge_array;
+        int twin_edge = edge_array.array[edge].twin_edge_ID;
+        int my_face = edge_array.array[edge].inc_face_ID;
+        int twin_face = edge_array.array[twin_edge].inc_face_ID;
+        draw_face((Color_RGBA){0.5f, 0.5f, 0.0f, 0.5f}, my_face);
+        if(twin_face != -1)
+                draw_face((Color_RGBA){0.5f, 0.5f, 0.0f, 0.5f}, twin_face);
 }
 void draw_adjacent_face_from_vertex(const int vertex){
+        HE_Edge_Array edge_array = current_object.edge_array;
+        int starting_edge      = current_object.vertex_array.array[vertex].inc_edge_ID;
+        int previous_edge      = edge_array.array[starting_edge].prvsEdge_ID;
+        int twin_previous_edge = edge_array.array[previous_edge].twin_edge_ID;
+        int face = edge_array.array[twin_previous_edge].inc_face_ID;
+        if(face != -1)
+                draw_face((Color_RGBA){0.5f, 0.5f, 0.0f, 0.5f}, face);
+        while(starting_edge != twin_previous_edge){
+                previous_edge      = edge_array.array[twin_previous_edge].prvsEdge_ID;
+                twin_previous_edge = edge_array.array[previous_edge].twin_edge_ID;
+                face = edge_array.array[twin_previous_edge].inc_face_ID;
+                if(face != -1)
+                        draw_face((Color_RGBA){0.5f, 0.5f, 0.0f, 0.5f}, face);
+
+        }
 }
 
 void init() {
@@ -445,6 +467,7 @@ typedef struct{
         unsigned int size;
 } String;
 
+int option_selected = 0;
 int step_draw = TRUE;
 int selected_vertex = 0;
 int selected_face = 0;
@@ -476,7 +499,7 @@ void HE_draw(const HE_Object object){
                 //printf("From v%d to v%d\n", originVertex+1, nextVertex+1);
                 //printf("v%d: %.2f %.2f %.2f\n", originVertex+1, x1, y1, z1);
                 //printf("v%d: %.2f %.2f %.2f\n", nextVertex+1, x2, y2, z2);
-                if (step_draw == FALSE && (originVertex == selected_vertex || nextVertex == selected_vertex))
+                if (step_draw == FALSE && (originVertex == selected_vertex || nextVertex == selected_vertex) && option_selected == 3)
                         drawSegmentByLineEquation(x1, y1, z1, x2, y2, z2, 20, 0.4f, (Color_RGBA){1.0f, 0.0f, 0.0f, 1.0f});
                 if (step == cnt-1 && step_draw == TRUE)
                         drawSegmentByLineEquation(x1, y1, z1, x2, y2, z2, 20, 0.4f, (Color_RGBA){1.0f, 0.0f, 0.0f, 1.0f});
@@ -487,8 +510,20 @@ void HE_draw(const HE_Object object){
 
 void draw(const int step){
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        //draw_face((Color_RGBA){1.0f, 0.0f, 1.0f, 0.5f}, selected_face);
-        draw_adjacent_face_from_face(selected_face);
+
+        if(step_draw == FALSE){
+                switch(option_selected){
+                        case 0:
+                                draw_adjacent_face_from_face(selected_face);
+                                break;
+                        case 1:
+                                draw_adjacent_face_from_edge(selected_edge);
+                                break;
+                        case 2:
+                                draw_adjacent_face_from_vertex(selected_vertex);
+                                break;
+                }
+        }
         HE_draw(current_object);
 }
 
@@ -617,16 +652,26 @@ int main(int argc, char** argv) {
 
                 // ===== GUI ===================
                 if (nk_begin(ctx, "MENU", nk_rect(50, 50, 230, 250), NK_WINDOW_BORDER|NK_WINDOW_MOVABLE|NK_WINDOW_SCALABLE|NK_WINDOW_MINIMIZABLE|NK_WINDOW_TITLE)){
-                        nk_layout_row_dynamic(ctx, 80, 1);
-                        nk_label(ctx, "Hello world", NK_TEXT_CENTERED);
-
                         nk_layout_row_dynamic(ctx, 40, 1);
                         if(nk_button_label(ctx,"Toggle drawing"))
                                 step_draw = !step_draw;
+                        nk_layout_row_dynamic(ctx, 20, 1);
                         if(step_draw == FALSE){
-                                selected_face = nk_combo(ctx, temp_face, face_list_size, selected_face, 25, nk_vec2(200,200));
-                                selected_edge = nk_combo(ctx, temp_edge, edge_list_size, selected_edge, 25, nk_vec2(200,200));
-                                selected_vertex = nk_combo(ctx, temp, list_size, selected_vertex, 25, nk_vec2(200,200));
+                                if (nk_option_label(ctx, "Face: Adj faces", option_selected == 0))
+                                        option_selected = 0;
+                                if (nk_option_label(ctx, "Edge: Adj faces", option_selected == 1)) 
+                                        option_selected = 1;
+                                if (nk_option_label(ctx, "Vertex: Adj faces", option_selected == 2)) 
+                                        option_selected = 2;
+                                if (nk_option_label(ctx, "Vertex: Adj edges", option_selected == 3)) 
+                                        option_selected = 3;
+
+                                if(option_selected == 0)
+                                        selected_face = nk_combo(ctx, temp_face, face_list_size, selected_face, 25, nk_vec2(200,200));
+                                if(option_selected == 1)
+                                        selected_edge = nk_combo(ctx, temp_edge, edge_list_size, selected_edge, 25, nk_vec2(200,200));
+                                if(option_selected == 2 || option_selected == 3)
+                                        selected_vertex = nk_combo(ctx, temp, list_size, selected_vertex, 25, nk_vec2(200,200));
                                 //if(nk_button_label(ctx,"Vert"));
                         }
                 }
