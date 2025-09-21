@@ -46,7 +46,7 @@
 #include "nuklear/nuklear_sdl_gl3.h"
 
 // My defines
-#define SCREEN_WIDTH   800
+#define SCREEN_WIDTH   600
 #define SCREEN_HEIGHT  600
 #define TRUE  1
 #define FALSE 0
@@ -117,6 +117,8 @@ typedef struct Color_RGBA{
 vec3 camera_pos   = {0.0f, 0.0f,  7.0f};
 vec3 camera_front = {0.0f, 0.0f, -1.0f};
 vec3 camera_up    = {0.0f, 1.0f,  0.0f};
+Color_RGBA red_color = {0.85f, 0.02f, 0.12f, 0.5f};
+Color_RGBA green_color = {0.20f, 1.0f, 0.69f, 0.5f};
 
 void drawSegmentByLineEquation(float x1, float y1, float z1, float x2, float y2, float z2, const unsigned int resolution, const float point_size_multiplier, const Color_RGBA color){
         float a = x2-x1;
@@ -142,7 +144,7 @@ void drawSegmentByLineEquation(float x1, float y1, float z1, float x2, float y2,
         glm_mat4_identity(model);
         //glm_scale(model, (vec4){0.1f, 0.1f, 0.1f, 1.0f});
         //glm_translate(model, (vec3){0.0f, -20.0f, 0.0f});
-        //glm_rotate(model, (float)SDL_GetTicks()/2000.0f, (vec3){0.0f, 1.0f, 0.0f});
+        glm_rotate(model, (float)SDL_GetTicks()/2000.0f, (vec3){0.0f, 1.0f, 0.0f});
 
         mat4 view;
         glm_mat4_identity(view);
@@ -207,7 +209,7 @@ void draw_face(const Color_RGBA color, const unsigned int face){
         glm_mat4_identity(model);
         //glm_scale(model, (vec4){0.1f, 0.1f, 0.1f, 1.0f});
         //glm_translate(model, (vec3){0.0f, -20.0f, 0.0f});
-        //glm_rotate(model, (float)SDL_GetTicks()/2000.0f, (vec3){0.0f, 1.0f, 0.0f});
+        glm_rotate(model, (float)SDL_GetTicks()/2000.0f, (vec3){0.0f, 1.0f, 0.0f});
 
         mat4 view;
         glm_mat4_identity(view);
@@ -256,20 +258,20 @@ void draw_face(const Color_RGBA color, const unsigned int face){
 }
 
 void draw_adjacent_face_from_face(const int face){
-        draw_face((Color_RGBA){0.5f, 0.0f, 0.0f, 0.5f}, face);
+        draw_face(red_color, face);
         HE_Edge_Array edge_array = current_object.edge_array;
         int starting_edge = current_object.face_array.array[face].edge_ID;
         int next_edge = edge_array.array[starting_edge].nextEdge_ID;
         int next_edge_twin = edge_array.array[next_edge].twin_edge_ID;
         int next_edge_twin_face = edge_array.array[next_edge_twin].inc_face_ID;
         if(next_edge_twin_face != -1)
-                draw_face((Color_RGBA){0.5f, 0.5f, 0.0f, 0.5f}, next_edge_twin_face);
+                draw_face(green_color, next_edge_twin_face);
         while(starting_edge != next_edge){
                 next_edge = edge_array.array[next_edge].nextEdge_ID;
                 next_edge_twin = edge_array.array[next_edge].twin_edge_ID;
                 next_edge_twin_face = edge_array.array[next_edge_twin].inc_face_ID;
                 if(next_edge_twin_face != -1)
-                        draw_face((Color_RGBA){0.5f, 0.5f, 0.0f, 0.5f}, next_edge_twin_face);
+                        draw_face(green_color, next_edge_twin_face);
         }
 }
 
@@ -278,9 +280,9 @@ void draw_adjacent_face_from_edge(const int edge){
         int twin_edge = edge_array.array[edge].twin_edge_ID;
         int my_face = edge_array.array[edge].inc_face_ID;
         int twin_face = edge_array.array[twin_edge].inc_face_ID;
-        draw_face((Color_RGBA){0.5f, 0.5f, 0.0f, 0.5f}, my_face);
+        draw_face(green_color, my_face);
         if(twin_face != -1)
-                draw_face((Color_RGBA){0.5f, 0.5f, 0.0f, 0.5f}, twin_face);
+                draw_face(green_color, twin_face);
 }
 void draw_adjacent_face_from_vertex(const int vertex){
         HE_Edge_Array edge_array = current_object.edge_array;
@@ -289,16 +291,67 @@ void draw_adjacent_face_from_vertex(const int vertex){
         int twin_previous_edge = edge_array.array[previous_edge].twin_edge_ID;
         int face = edge_array.array[twin_previous_edge].inc_face_ID;
         if(face != -1)
-                draw_face((Color_RGBA){0.5f, 0.5f, 0.0f, 0.5f}, face);
+                draw_face(green_color, face);
         while(starting_edge != twin_previous_edge){
                 previous_edge      = edge_array.array[twin_previous_edge].prvsEdge_ID;
                 twin_previous_edge = edge_array.array[previous_edge].twin_edge_ID;
                 face = edge_array.array[twin_previous_edge].inc_face_ID;
                 if(face != -1)
-                        draw_face((Color_RGBA){0.5f, 0.5f, 0.0f, 0.5f}, face);
+                        draw_face(green_color, face);
 
         }
 }
+
+void update_itemlist(char*** orig, unsigned int* size){
+        char** items = *orig;
+        for(int i = 0; i < *size; i++)
+                free(items[i]);
+        free(items);
+
+        *size = current_object.vertex_array.size;
+        items = (char**)malloc(sizeof(char*)*(*size));
+        for(int i = 0; i < *size; i++){
+                char* str_buff = (char*)malloc(sizeof(char)*50);
+                snprintf(str_buff,sizeof(str_buff), "%s%d", "v", i+1);
+                //printf("%s ", str_buff);
+                items[i] = str_buff;
+        }
+        *orig = items;
+}
+
+void update_facelist(char***orig, unsigned int* size){
+        char** items = *orig;
+        for(int i = 0; i < *size; i++)
+                free(items[i]);
+        free(items);
+
+        *size = current_object.face_array.size;
+        items = (char**)malloc(sizeof(char*)*(*size));
+        for(int i = 0; i < *size; i++){
+                char* str_buff = (char*)malloc(sizeof(char)*50);
+                snprintf(str_buff,sizeof(str_buff), "%s%d", "f", i);
+                //printf("%s ", str_buff);
+                items[i] = str_buff;
+        }
+        *orig = items;
+}
+
+void update_edgelist(char***orig, unsigned int* size){
+        char** items = *orig;
+        for(int i = 0; i < *size; i++)
+                free(items[i]);
+        free(items);
+
+        *size = current_object.edge_array.size;
+        items = (char**)malloc(sizeof(char*)*(*size));
+        for(int i = 0; i < *size; i++){
+                char* str_buff = (char*)malloc(sizeof(char)*50);
+                snprintf(str_buff,sizeof(str_buff), "%s%d", "e", i);
+                items[i] = str_buff;
+        }
+        *orig = items;
+}
+
 
 void init() {
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
@@ -364,6 +417,7 @@ void init() {
 
         current_object = HE_load("test.obj");
 }
+int update_item = FALSE;
 
 void input(int * quit){
         SDL_Event e;
@@ -397,6 +451,7 @@ void input(int * quit){
                                 free(current_object.face_array.array);
                                 free(current_object.edge_array.array);
                                 current_object = HE_load(opened_file);
+                                update_item = TRUE;
                                 SDL_free(e.drop.file);
                                 break;
                 }
@@ -499,18 +554,24 @@ void HE_draw(const HE_Object object){
                 //printf("From v%d to v%d\n", originVertex+1, nextVertex+1);
                 //printf("v%d: %.2f %.2f %.2f\n", originVertex+1, x1, y1, z1);
                 //printf("v%d: %.2f %.2f %.2f\n", nextVertex+1, x2, y2, z2);
-                if (step_draw == FALSE && (originVertex == selected_vertex || nextVertex == selected_vertex) && option_selected == 3)
-                        drawSegmentByLineEquation(x1, y1, z1, x2, y2, z2, 20, 0.4f, (Color_RGBA){1.0f, 0.0f, 0.0f, 1.0f});
-                if (step == cnt-1 && step_draw == TRUE)
-                        drawSegmentByLineEquation(x1, y1, z1, x2, y2, z2, 20, 0.4f, (Color_RGBA){1.0f, 0.0f, 0.0f, 1.0f});
-                drawSegmentByLineEquation(x1, y1, z1, x2, y2, z2, 20, 0.25f, (Color_RGBA){1.0f, 1.0f, 0.0f, 1.0f});
+                if (step_draw == FALSE && (originVertex == selected_vertex || nextVertex == selected_vertex) && option_selected == 3){
+                        drawSegmentByLineEquation(x1, y1, z1, x2, y2, z2, 20, 0.4f, (Color_RGBA){0.85f, 0.02f, 0.12f, 1.0f});
+                }else if (step == cnt-1 && step_draw == TRUE){
+                        drawSegmentByLineEquation(x1, y1, z1, x2, y2, z2, 20, 0.4f, (Color_RGBA){0.85f, 0.02f, 0.12f, 1.0f});
+                }else{
+                        drawSegmentByLineEquation(x1, y1, z1, x2, y2, z2, 20, 0.25f, (Color_RGBA){1.0f, 0.6f, 0.133f, 1.0f});
+                }
                 step++;
         }
 }
 
 void draw(const int step){
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        glEnable(GL_DEPTH_TEST);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
+        HE_draw(current_object);
         if(step_draw == FALSE){
                 switch(option_selected){
                         case 0:
@@ -524,57 +585,6 @@ void draw(const int step){
                                 break;
                 }
         }
-        HE_draw(current_object);
-}
-
-void update_itemlist(char*** orig, unsigned int* size){
-        char** items = *orig;
-        for(int i = 0; i < *size; i++)
-                free(items[i]);
-        free(items);
-
-        *size = current_object.vertex_array.size;
-        items = (char**)malloc(sizeof(char*)*(*size));
-        for(int i = 0; i < *size; i++){
-                char* str_buff = (char*)malloc(sizeof(char)*50);
-                snprintf(str_buff,sizeof(str_buff), "%s%d", "v", i+1);
-                //printf("%s ", str_buff);
-                items[i] = str_buff;
-        }
-        *orig = items;
-}
-
-void update_facelist(char***orig, unsigned int* size){
-        char** items = *orig;
-        for(int i = 0; i < *size; i++)
-                free(items[i]);
-        free(items);
-
-        *size = current_object.face_array.size;
-        items = (char**)malloc(sizeof(char*)*(*size));
-        for(int i = 0; i < *size; i++){
-                char* str_buff = (char*)malloc(sizeof(char)*50);
-                snprintf(str_buff,sizeof(str_buff), "%s%d", "f", i);
-                //printf("%s ", str_buff);
-                items[i] = str_buff;
-        }
-        *orig = items;
-}
-
-void update_edgelist(char***orig, unsigned int* size){
-        char** items = *orig;
-        for(int i = 0; i < *size; i++)
-                free(items[i]);
-        free(items);
-
-        *size = current_object.edge_array.size;
-        items = (char**)malloc(sizeof(char*)*(*size));
-        for(int i = 0; i < *size; i++){
-                char* str_buff = (char*)malloc(sizeof(char)*50);
-                snprintf(str_buff,sizeof(str_buff), "%s%d", "e", i);
-                items[i] = str_buff;
-        }
-        *orig = items;
 }
 
 int main(int argc, char** argv) {
@@ -626,30 +636,21 @@ int main(int argc, char** argv) {
         unsigned int edge_list_size = 0;
         update_edgelist(&edge_list, &edge_list_size);
 
-        const char* temp[list_size];
-        for (int i = 0; i < list_size; i++){
-                temp[i] = items[i];
-                //printf("%s ", temp[i]);
-        }
-
-        const char* temp_face[face_list_size];
-        for (int i = 0; i < face_list_size; i++){
-                temp_face[i] = face_list[i];
-        }
-
-        const char* temp_edge[edge_list_size];
-        for (int i = 0; i < edge_list_size; i++){
-                temp_edge[i] = edge_list[i];
-        }
-
         ctx = nk_sdl_init(glWindow);
         {struct nk_font_atlas *atlas;
         nk_sdl_font_stash_begin(&atlas);
         nk_sdl_font_stash_end();}
-
         while(quit == FALSE){
                 input(&quit);
-
+                if(update_item == TRUE){
+                        update_item = FALSE;
+                        update_itemlist(&items, &list_size);
+                        update_facelist(&face_list, &face_list_size);
+                        update_edgelist(&edge_list, &edge_list_size);
+                        selected_vertex = 0;
+                        selected_edge = 0;
+                        selected_face = 0;
+                }
                 // ===== GUI ===================
                 if (nk_begin(ctx, "MENU", nk_rect(50, 50, 230, 250), NK_WINDOW_BORDER|NK_WINDOW_MOVABLE|NK_WINDOW_SCALABLE|NK_WINDOW_MINIMIZABLE|NK_WINDOW_TITLE)){
                         nk_layout_row_dynamic(ctx, 40, 1);
@@ -667,11 +668,11 @@ int main(int argc, char** argv) {
                                         option_selected = 3;
 
                                 if(option_selected == 0)
-                                        selected_face = nk_combo(ctx, temp_face, face_list_size, selected_face, 25, nk_vec2(200,200));
+                                        selected_face = nk_combo(ctx, (const char* const*)face_list, face_list_size, selected_face, 25, nk_vec2(200,200));
                                 if(option_selected == 1)
-                                        selected_edge = nk_combo(ctx, temp_edge, edge_list_size, selected_edge, 25, nk_vec2(200,200));
+                                        selected_edge = nk_combo(ctx, (const char* const*)edge_list, edge_list_size, selected_edge, 25, nk_vec2(200,200));
                                 if(option_selected == 2 || option_selected == 3)
-                                        selected_vertex = nk_combo(ctx, temp, list_size, selected_vertex, 25, nk_vec2(200,200));
+                                        selected_vertex = nk_combo(ctx, (const char* const*)items, list_size, selected_vertex, 25, nk_vec2(200,200));
                                 //if(nk_button_label(ctx,"Vert"));
                         }
                 }
