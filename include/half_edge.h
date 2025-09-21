@@ -85,6 +85,81 @@ void HE_faceArray_Push(HE_Face_Array* faceArray, unsigned int edge_ID){
         faceArray->size++;
 }
 
+unsigned int* HE_get_object_single_face_as_array(HE_Object object, int* size, const unsigned int face){
+        HE_Face_Array faces = object.face_array;
+        HE_Edge_Array edges = object.edge_array;
+        int counter = 0;
+
+        int starting_edge = faces.array[face].edge_ID;
+        int starting_vertex = edges.array[starting_edge].origin_vertex_ID;
+        counter++;
+        int next_edge = edges.array[starting_edge].nextEdge_ID;
+        int next_vertex = edges.array[next_edge].origin_vertex_ID;
+        
+        while(starting_edge != next_edge){
+                next_edge = edges.array[next_edge].nextEdge_ID;
+                next_vertex = edges.array[next_edge].origin_vertex_ID;
+                counter++;
+        }
+
+
+        unsigned int* output = (unsigned int*)malloc(sizeof(unsigned int)*counter);
+        counter = 0;
+
+        starting_edge = faces.array[face].edge_ID;
+        starting_vertex = edges.array[starting_edge].origin_vertex_ID;
+        output[counter] = starting_vertex;
+        counter++;
+        next_edge = edges.array[starting_edge].nextEdge_ID;
+        next_vertex = edges.array[next_edge].origin_vertex_ID;
+        
+        while(starting_edge != next_edge){
+                output[counter] = next_vertex;
+                next_edge = edges.array[next_edge].nextEdge_ID;
+                next_vertex = edges.array[next_edge].origin_vertex_ID;
+                counter++;
+        }
+        *size = counter;
+        return output;
+}
+
+unsigned int* HE_get_object_faces_as_array(HE_Object object, int* size){
+        HE_Face_Array faces = object.face_array;
+        HE_Edge_Array edges = object.edge_array;
+        int counter = 0;
+        for(int i = 0; i < faces.size; i++){
+                int starting_edge = faces.array[i].edge_ID;
+                int starting_vertex = edges.array[starting_edge].origin_vertex_ID;
+                counter++;
+                int next_edge = edges.array[starting_edge].nextEdge_ID;
+                int next_vertex = edges.array[next_edge].origin_vertex_ID;
+                
+                while(starting_edge != next_edge){
+                        next_edge = edges.array[next_edge].nextEdge_ID;
+                        next_vertex = edges.array[next_edge].origin_vertex_ID;
+                        counter++;
+                }
+        }
+        unsigned int* output = (unsigned int*)malloc(sizeof(unsigned int)*counter);
+        counter = 0;
+        for(int i = 0; i < faces.size; i++){
+                int starting_edge = faces.array[i].edge_ID;
+                int starting_vertex = edges.array[starting_edge].origin_vertex_ID;
+                output[counter] = starting_vertex;
+                counter++;
+                int next_edge = edges.array[starting_edge].nextEdge_ID;
+                int next_vertex = edges.array[next_edge].origin_vertex_ID;
+                
+                while(starting_edge != next_edge){
+                        output[counter] = next_vertex;
+                        next_edge = edges.array[next_edge].nextEdge_ID;
+                        next_vertex = edges.array[next_edge].origin_vertex_ID;
+                        counter++;
+                }
+        }
+        *size = counter;
+        return output;
+}
 HE_Object HE_load(const char* filename){
         float x, y, z;
         OBJ object;

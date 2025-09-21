@@ -17,6 +17,9 @@
 #include <SDL2/SDL_video.h>
 #include <glad/glad.h>
 #include <stdatomic.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 #include <sys/types.h>
 #include <unistd.h> // for wait time
@@ -35,7 +38,7 @@
 #define NK_INCLUDE_FONT_BAKING
 #define NK_INCLUDE_DEFAULT_FONT
 #define NK_IMPLEMENTATION
-#define NK_GLFW_GL4_IMPLEMENTATION
+#define NK_SDL_GL3_IMPLEMENTATION
 #define NK_KEYSTATE_BASED_INPUT
 #define MAX_VERTEX_BUFFER 512 * 1024
 #define MAX_ELEMENT_BUFFER 128 * 1024
@@ -43,12 +46,13 @@
 #include "nuklear/nuklear_sdl_gl3.h"
 
 // My defines
-#define SCREEN_WIDTH   600
+#define SCREEN_WIDTH   800
 #define SCREEN_HEIGHT  600
 #define TRUE  1
 #define FALSE 0
-#define TARGET_FPS 60
+#define TARGET_FPS 90
 #define FRAME_TARGET_TIME 1000/TARGET_FPS
+#define FOV 70
 
 SDL_Window*   glWindow = NULL;
 SDL_GLContext glContext = NULL;
@@ -81,6 +85,17 @@ unsigned int fragmentShader;
 unsigned int shaderProgram;
 unsigned int VAO;
 unsigned int VBO;
+
+unsigned int VAO_faces;
+unsigned int VBO_faces;
+unsigned int EBO_faces;
+
+HE_Object current_object;
+char* opened_file = NULL;
+int last_frame_time = 0;
+int lastTime = 0;
+struct nk_context *ctx;
+
 
 void init(void);
 void reshape(void);
@@ -115,7 +130,6 @@ void drawSegmentByLineEquation(float x1, float y1, float z1, float x2, float y2,
         float verts[(resolution*3)+3];
         float step = 1.0f / (resolution-1);
         for (int i = 0; i <= resolution-1; i++) { // From 0 till res-1
-                //printf("%.2f %.2f %.2f\n", x, y, z);
                 verts[i*3 + 0] = x;
                 verts[i*3 + 1] = y;
                 verts[i*3 + 2] = z;
@@ -123,13 +137,12 @@ void drawSegmentByLineEquation(float x1, float y1, float z1, float x2, float y2,
                 y += step*b;
                 z += step*c;
         }
-        //printf("\n");
 
         mat4 model;
         glm_mat4_identity(model);
         //glm_scale(model, (vec4){0.1f, 0.1f, 0.1f, 1.0f});
         //glm_translate(model, (vec3){0.0f, -20.0f, 0.0f});
-        glm_rotate(model, (float)SDL_GetTicks()/2000.0f, (vec3){0.0f, 1.0f, 0.0f});
+        //glm_rotate(model, (float)SDL_GetTicks()/2000.0f, (vec3){0.0f, 1.0f, 0.0f});
 
         mat4 view;
         glm_mat4_identity(view);
@@ -146,7 +159,8 @@ void drawSegmentByLineEquation(float x1, float y1, float z1, float x2, float y2,
         glm_lookat(camera_pos, target_dir, camera_up, view);
 
         mat4 proj;
-        glm_perspective(glm_rad(45), (float)SCREEN_WIDTH/(float)SCREEN_HEIGHT, 0.1f, 100.0f, proj);
+        glm_mat4_identity(proj);
+        glm_perspective(glm_rad(FOV), (float)SCREEN_WIDTH/(float)SCREEN_HEIGHT, 0.1f, 100.0f, proj);
 
         int vertexColorLocation = glGetUniformLocation(shaderProgram, "ourColor");
         int transformLocation   = glGetUniformLocation(shaderProgram, "model");
@@ -169,10 +183,100 @@ void drawSegmentByLineEquation(float x1, float y1, float z1, float x2, float y2,
         glDrawArrays(GL_POINTS, 0 , resolution);
 }
 
-HE_Object current_object;
-char* opened_file = NULL;
-int last_frame_time = 0;
-int lastTime = 0;
+float* HE_get_object_verts_as_array(HE_Object object){
+        HE_Vertex_Array verts = object.vertex_array;
+        float* output = (float*)malloc(sizeof(float)*3*verts.size);
+        for(int i = 0; i < verts.size; i++){
+                output[i*3]       = verts.array[i].x;
+                output[(i*3) + 1] = verts.array[i].y;
+                output[(i*3) + 2] = verts.array[i].z;
+        }
+        return output;
+}
+
+
+void draw_face(const Color_RGBA color, const unsigned int face){
+        float* verts = HE_get_object_verts_as_array(current_object);
+        int size = current_object.vertex_array.size*3;
+
+        int face_data_size;
+        //unsigned int* face_data = HE_get_object_faces_as_array(current_object, &face_data_size);
+        unsigned int* face_data = HE_get_object_single_face_as_array(current_object, &face_data_size, face);
+
+        mat4 model;
+        glm_mat4_identity(model);
+        //glm_scale(model, (vec4){0.1f, 0.1f, 0.1f, 1.0f});
+        //glm_translate(model, (vec3){0.0f, -20.0f, 0.0f});
+        //glm_rotate(model, (float)SDL_GetTicks()/2000.0f, (vec3){0.0f, 1.0f, 0.0f});
+
+        mat4 view;
+        glm_mat4_identity(view);
+        //glm_translate(view, (vec3){0.0f, 0.0f, -7.0f});
+
+        vec3 target_dir;
+
+        vec3 direction;
+        direction[0] = cos(glm_rad(yaw)) * cos(glm_rad(pitch));
+        direction[1] = sin(glm_rad(pitch));
+        direction[2] = sin(glm_rad(yaw)) * cos(glm_rad(pitch));
+        glm_normalize_to(direction, camera_front);
+        glm_vec3_add(camera_pos, camera_front, target_dir);
+        glm_lookat(camera_pos, target_dir, camera_up, view);
+
+        mat4 proj;
+        glm_mat4_identity(proj);
+        glm_perspective(glm_rad(FOV), (float)SCREEN_WIDTH/(float)SCREEN_HEIGHT, 0.1f, 100.0f, proj);
+
+        int vertexColorLocation = glGetUniformLocation(shaderProgram, "ourColor");
+        int transformLocation   = glGetUniformLocation(shaderProgram, "model");
+        int viewLocation        = glGetUniformLocation(shaderProgram, "view");
+        int projLocation        = glGetUniformLocation(shaderProgram, "projection");
+        int sizeMultiplier        = glGetUniformLocation(shaderProgram, "sizeMultiplier");
+        glUseProgram(shaderProgram);
+        glUniform4f(vertexColorLocation, color.R, color.G, color.B, color.A);
+        glUniformMatrix4fv(transformLocation, 1, GL_FALSE, (const float*)model);
+        glUniformMatrix4fv(viewLocation, 1, GL_FALSE, (const float*)view);
+        glUniformMatrix4fv(projLocation, 1, GL_FALSE, (const float*)proj);
+        glUniform1f(sizeMultiplier, 1);
+
+        glBindVertexArray(VAO_faces);
+
+        glBindBuffer(GL_ARRAY_BUFFER, VBO_faces);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(float)*size, verts, GL_STATIC_DRAW);
+
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO_faces);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(unsigned int)*face_data_size, face_data, GL_STATIC_DRAW);
+
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+        glEnableVertexAttribArray(0);
+
+        glDrawElements(GL_TRIANGLES, face_data_size , GL_UNSIGNED_INT, 0);
+        free(verts);
+        free(face_data);
+}
+
+void draw_adjacent_face_from_face(const int face){
+        draw_face((Color_RGBA){0.5f, 0.0f, 0.0f, 0.5f}, face);
+        HE_Edge_Array edge_array = current_object.edge_array;
+        int starting_edge = current_object.face_array.array[face].edge_ID;
+        int next_edge = edge_array.array[starting_edge].nextEdge_ID;
+        int next_edge_twin = edge_array.array[next_edge].twin_edge_ID;
+        int next_edge_twin_face = edge_array.array[next_edge_twin].inc_face_ID;
+        if(next_edge_twin_face != -1)
+                draw_face((Color_RGBA){0.5f, 0.5f, 0.0f, 0.5f}, next_edge_twin_face);
+        while(starting_edge != next_edge){
+                next_edge = edge_array.array[next_edge].nextEdge_ID;
+                next_edge_twin = edge_array.array[next_edge].twin_edge_ID;
+                next_edge_twin_face = edge_array.array[next_edge_twin].inc_face_ID;
+                if(next_edge_twin_face != -1)
+                        draw_face((Color_RGBA){0.5f, 0.5f, 0.0f, 0.5f}, next_edge_twin_face);
+        }
+}
+
+void draw_adjacent_face_from_edge(const int edge){
+}
+void draw_adjacent_face_from_vertex(const int vertex){
+}
 
 void init() {
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
@@ -222,6 +326,10 @@ void init() {
         glGenVertexArrays(1, &VAO);
         glGenBuffers(1, &VBO);
 
+        glGenVertexArrays(1, &VAO_faces);
+        glGenBuffers(1, &VBO_faces);
+        glGenBuffers(1, &EBO_faces);
+
 
         glBindVertexArray(VAO);
         /**
@@ -237,6 +345,7 @@ void init() {
 
 void input(int * quit){
         SDL_Event e;
+        nk_input_begin(ctx);
         const float camera_speed = 0.1f;
         const Uint8* states = SDL_GetKeyboardState(NULL);
         while(SDL_PollEvent(&e)){
@@ -269,6 +378,7 @@ void input(int * quit){
                                 SDL_free(e.drop.file);
                                 break;
                 }
+                nk_sdl_handle_event(&e);
         }
         if(states[SDL_SCANCODE_W]){
                 vec3 test;
@@ -309,6 +419,8 @@ void input(int * quit){
         printf("Fnt: %.2f, %.2f, %.2f\n", camera_front[0], camera_front[1], camera_front[2]);
         printf("Up:  %.2f, %.2f, %.2f\n\n", camera_up[0], camera_up[1], camera_up[2]);
         }
+        nk_sdl_handle_grab();
+        nk_input_end(ctx);
 }
 
 void update(int* step){
@@ -333,6 +445,10 @@ typedef struct{
         unsigned int size;
 } String;
 
+int step_draw = TRUE;
+int selected_vertex = 0;
+int selected_face = 0;
+int selected_edge = 0;
 void HE_draw(const HE_Object object){
         HE_Edge_Array   edgeArray = object.edge_array;
         HE_Vertex_Array verArray  = object.vertex_array;
@@ -342,6 +458,8 @@ void HE_draw(const HE_Object object){
         float cnt = (int)(SDL_GetTicks()/((scds*1000.0f)/edgeArray.size))%(edgeArray.size) + 1;
         int step = 0;
 
+        if(step_draw == FALSE)
+                cnt = edgeArray.size;
         for(int e = 0; e <= edgeArray.size; e++){
                 if(step == cnt)
                         break;
@@ -358,7 +476,9 @@ void HE_draw(const HE_Object object){
                 //printf("From v%d to v%d\n", originVertex+1, nextVertex+1);
                 //printf("v%d: %.2f %.2f %.2f\n", originVertex+1, x1, y1, z1);
                 //printf("v%d: %.2f %.2f %.2f\n", nextVertex+1, x2, y2, z2);
-                if (step == cnt-1)
+                if (step_draw == FALSE && (originVertex == selected_vertex || nextVertex == selected_vertex))
+                        drawSegmentByLineEquation(x1, y1, z1, x2, y2, z2, 20, 0.4f, (Color_RGBA){1.0f, 0.0f, 0.0f, 1.0f});
+                if (step == cnt-1 && step_draw == TRUE)
                         drawSegmentByLineEquation(x1, y1, z1, x2, y2, z2, 20, 0.4f, (Color_RGBA){1.0f, 0.0f, 0.0f, 1.0f});
                 drawSegmentByLineEquation(x1, y1, z1, x2, y2, z2, 20, 0.25f, (Color_RGBA){1.0f, 1.0f, 0.0f, 1.0f});
                 step++;
@@ -367,11 +487,59 @@ void HE_draw(const HE_Object object){
 
 void draw(const int step){
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        //draw_face((Color_RGBA){1.0f, 0.0f, 1.0f, 0.5f}, selected_face);
+        draw_adjacent_face_from_face(selected_face);
         HE_draw(current_object);
-        SDL_GL_SwapWindow(glWindow);
+}
 
-        mat4 proj;
-        glm_perspective(glm_rad(45), (float)SCREEN_WIDTH/(float)SCREEN_HEIGHT, 0.1f, 100.0f, proj);
+void update_itemlist(char*** orig, unsigned int* size){
+        char** items = *orig;
+        for(int i = 0; i < *size; i++)
+                free(items[i]);
+        free(items);
+
+        *size = current_object.vertex_array.size;
+        items = (char**)malloc(sizeof(char*)*(*size));
+        for(int i = 0; i < *size; i++){
+                char* str_buff = (char*)malloc(sizeof(char)*50);
+                snprintf(str_buff,sizeof(str_buff), "%s%d", "v", i+1);
+                //printf("%s ", str_buff);
+                items[i] = str_buff;
+        }
+        *orig = items;
+}
+
+void update_facelist(char***orig, unsigned int* size){
+        char** items = *orig;
+        for(int i = 0; i < *size; i++)
+                free(items[i]);
+        free(items);
+
+        *size = current_object.face_array.size;
+        items = (char**)malloc(sizeof(char*)*(*size));
+        for(int i = 0; i < *size; i++){
+                char* str_buff = (char*)malloc(sizeof(char)*50);
+                snprintf(str_buff,sizeof(str_buff), "%s%d", "f", i);
+                //printf("%s ", str_buff);
+                items[i] = str_buff;
+        }
+        *orig = items;
+}
+
+void update_edgelist(char***orig, unsigned int* size){
+        char** items = *orig;
+        for(int i = 0; i < *size; i++)
+                free(items[i]);
+        free(items);
+
+        *size = current_object.edge_array.size;
+        items = (char**)malloc(sizeof(char*)*(*size));
+        for(int i = 0; i < *size; i++){
+                char* str_buff = (char*)malloc(sizeof(char)*50);
+                snprintf(str_buff,sizeof(str_buff), "%s%d", "e", i);
+                items[i] = str_buff;
+        }
+        *orig = items;
 }
 
 int main(int argc, char** argv) {
@@ -392,6 +560,7 @@ int main(int argc, char** argv) {
                 printf("Error creating window\n");
                 exit(1);
         }
+
         glContext = SDL_GL_CreateContext(glWindow);
         if(glContext == NULL){
                 printf("Error creating GL context\n");
@@ -405,15 +574,73 @@ int main(int argc, char** argv) {
         glViewport(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
 
 
-        init();
         int quit = FALSE;
         int counter = 0;
+
+        init();
+
+        char** items = NULL;
+        unsigned int list_size = 0;
+        update_itemlist(&items, &list_size);
+
+        char** face_list = NULL;
+        unsigned int face_list_size = 0;
+        update_facelist(&face_list, &face_list_size);
+        
+        char** edge_list = NULL;
+        unsigned int edge_list_size = 0;
+        update_edgelist(&edge_list, &edge_list_size);
+
+        const char* temp[list_size];
+        for (int i = 0; i < list_size; i++){
+                temp[i] = items[i];
+                //printf("%s ", temp[i]);
+        }
+
+        const char* temp_face[face_list_size];
+        for (int i = 0; i < face_list_size; i++){
+                temp_face[i] = face_list[i];
+        }
+
+        const char* temp_edge[edge_list_size];
+        for (int i = 0; i < edge_list_size; i++){
+                temp_edge[i] = edge_list[i];
+        }
+
+        ctx = nk_sdl_init(glWindow);
+        {struct nk_font_atlas *atlas;
+        nk_sdl_font_stash_begin(&atlas);
+        nk_sdl_font_stash_end();}
+
         while(quit == FALSE){
                 input(&quit);
+
+                // ===== GUI ===================
+                if (nk_begin(ctx, "MENU", nk_rect(50, 50, 230, 250), NK_WINDOW_BORDER|NK_WINDOW_MOVABLE|NK_WINDOW_SCALABLE|NK_WINDOW_MINIMIZABLE|NK_WINDOW_TITLE)){
+                        nk_layout_row_dynamic(ctx, 80, 1);
+                        nk_label(ctx, "Hello world", NK_TEXT_CENTERED);
+
+                        nk_layout_row_dynamic(ctx, 40, 1);
+                        if(nk_button_label(ctx,"Toggle drawing"))
+                                step_draw = !step_draw;
+                        if(step_draw == FALSE){
+                                selected_face = nk_combo(ctx, temp_face, face_list_size, selected_face, 25, nk_vec2(200,200));
+                                selected_edge = nk_combo(ctx, temp_edge, edge_list_size, selected_edge, 25, nk_vec2(200,200));
+                                selected_vertex = nk_combo(ctx, temp, list_size, selected_vertex, 25, nk_vec2(200,200));
+                                //if(nk_button_label(ctx,"Vert"));
+                        }
+                }
+
                 update(&counter);
+                nk_end(ctx);
+
                 draw(counter);
+                nk_sdl_render(NK_ANTI_ALIASING_ON, MAX_VERTEX_BUFFER, MAX_ELEMENT_BUFFER);
+                SDL_GL_SwapWindow(glWindow);
                 //quit = TRUE;
+
         }
+        nk_sdl_shutdown();
         SDL_GL_DeleteContext(glContext);
         SDL_DestroyWindow(glWindow);
         SDL_Quit();
@@ -421,5 +648,14 @@ int main(int argc, char** argv) {
         free(current_object.vertex_array.array);
         free(current_object.face_array.array);
         free(current_object.edge_array.array);
+        for(int i = 0; i < face_list_size; i++)
+                free(face_list[i]);
+        free(face_list);
+        for(int i = 0; i < list_size; i++)
+                free(items[i]);
+        free(items);
+        for(int i = 0; i < edge_list_size; i++)
+                free(edge_list[i]);
+        free(edge_list);
         return 0;
 }
