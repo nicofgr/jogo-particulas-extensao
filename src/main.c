@@ -54,6 +54,10 @@
 #define FRAME_TARGET_TIME 1000/TARGET_FPS
 #define FOV 70
 
+int rotate = FALSE;
+float rotate_speed = -1.0f/0.9; // frequency
+vec3 translation = {0.0f, 0.0f, 0.0f};
+
 SDL_Window*   glWindow = NULL;
 SDL_GLContext glContext = NULL;
 
@@ -143,12 +147,13 @@ void drawSegmentByLineEquation(float x1, float y1, float z1, float x2, float y2,
         mat4 model;
         glm_mat4_identity(model);
         //glm_scale(model, (vec4){0.1f, 0.1f, 0.1f, 1.0f});
-        //glm_translate(model, (vec3){0.0f, -20.0f, 0.0f});
-        glm_rotate(model, (float)SDL_GetTicks()/2000.0f, (vec3){0.0f, 1.0f, 0.0f});
+        glm_translate(model, translation);
+        if(rotate == TRUE)
+                glm_rotate(model, rotate_speed*((float)SDL_GetTicks()/1000.0f)*GLM_PI*2, (vec3){0.0f, 1.0f, 0.0f});
 
         mat4 view;
         glm_mat4_identity(view);
-        //glm_translate(view, (vec3){0.0f, 0.0f, -7.0f});
+        //glm_translate(view, translation);
 
         vec3 target_dir;
 
@@ -208,12 +213,13 @@ void draw_face(const Color_RGBA color, const unsigned int face){
         mat4 model;
         glm_mat4_identity(model);
         //glm_scale(model, (vec4){0.1f, 0.1f, 0.1f, 1.0f});
-        //glm_translate(model, (vec3){0.0f, -20.0f, 0.0f});
-        glm_rotate(model, (float)SDL_GetTicks()/2000.0f, (vec3){0.0f, 1.0f, 0.0f});
+        glm_translate(model, translation);
+        if(rotate == TRUE)
+                glm_rotate(model, rotate_speed*((float)SDL_GetTicks()/1000.0f)*GLM_PI*2, (vec3){0.0f, 1.0f, 0.0f});
 
         mat4 view;
         glm_mat4_identity(view);
-        //glm_translate(view, (vec3){0.0f, 0.0f, -7.0f});
+        glm_translate(view, translation);
 
         vec3 target_dir;
 
@@ -532,7 +538,7 @@ void HE_draw(const HE_Object object){
         HE_Vertex_Array verArray  = object.vertex_array;
         HE_Face_Array   faceArray = object.face_array;
 
-        float scds = 10;  // Time to draw whole figure
+        float scds = 8;  // Time to draw whole figure
         float cnt = (int)(SDL_GetTicks()/((scds*1000.0f)/edgeArray.size))%(edgeArray.size) + 1;
         int step = 0;
 
