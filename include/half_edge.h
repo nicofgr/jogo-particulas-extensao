@@ -270,8 +270,6 @@ HE_Object HE_load(const char* filename){
                 }
         }
 
-        printf("HELLO %d\n", ++debug_counter);   // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< AQUI
-        fflush(stdout);
         // Percorre os edges por relações para encontrar o previous e o next
         
         for(int index = 0; index < edgeArray.size; index++){
@@ -284,11 +282,9 @@ HE_Object HE_load(const char* filename){
                 }
         }
 
-        printf("HELLO %d\n", ++debug_counter);   // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-        fflush(stdout);
-
           // PRINTS
-        if(1){
+        if(0){
+        printf("Output from function HE_load\n");
         printf("Vertices\n");
         for(int i = 0; i < verArray.size; i++){
                 HE_Vertex vert = verArray.array[i];

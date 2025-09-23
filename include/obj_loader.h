@@ -127,8 +127,9 @@ void read_obj(const char* filename, OBJ* objct){
                                 break;
                 }
         }
-        if(1){
+        if(0){
         printf("\n");
+        printf("Output from function read_obj\n");
         printf("STRUCTURES\n");
         for(int i = 0; i < vertices.size; i++){
                 float x = vertices.verts[i].x;
@@ -151,7 +152,7 @@ void read_obj(const char* filename, OBJ* objct){
         objct->vertex = vertices;
 
         fclose(file);
-        printf("File %s successfully read\n", filename);
+        printf("File \"%s\" successfull read.\n", filename);
         fflush(stdout);
 }
 

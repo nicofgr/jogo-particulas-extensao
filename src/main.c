@@ -1,11 +1,12 @@
 //
 //#include "cglm/affine-pre.h"
-//#include "cglm/affine-pre.h"
 #include "cglm/affine.h"
+#include "cglm/cam.h"
 #include "cglm/mat4.h"
 #include "cglm/types.h"
 #include "cglm/util.h"
 #include "cglm/vec3.h"
+#include <cglm/cglm.h>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_events.h>
 #include <SDL2/SDL_keyboard.h>
@@ -23,11 +24,9 @@
 #include <string.h>
 #include <sys/types.h>
 #include <unistd.h> // for wait time
-#include <cglm/cglm.h>
 
 #include "half_edge.h"
-
-#include "obj_loader.h"
+#include "matrix_math.h"
 
 // Nuklear
 #define NK_INCLUDE_FIXED_TYPES
@@ -46,7 +45,7 @@
 #include "nuklear/nuklear_sdl_gl3.h"
 
 // My defines
-#define SCREEN_WIDTH   600
+#define SCREEN_WIDTH   800
 #define SCREEN_HEIGHT  600
 #define TRUE  1
 #define FALSE 0
@@ -54,8 +53,8 @@
 #define FRAME_TARGET_TIME 1000/TARGET_FPS
 #define FOV 70
 
-int rotate = FALSE;
-float rotate_speed = -1.0f/0.9; // frequency
+int rotate = TRUE;
+float rotate_speed = -1.0f/30; // frequency
 vec3 translation = {0.0f, 0.0f, 0.0f};
 
 SDL_Window*   glWindow = NULL;
@@ -74,6 +73,7 @@ const char *vertexShaderSource = "#version 330 core\n"
 "{\n"
 "   gl_Position = projection*view*model*vec4(aPos.x, aPos.y, aPos.z, 1.0);\n"
 "   gl_PointSize = min((50*sizeMultiplier)/gl_Position.z, 400.0f);\n"
+"   gl_PointSize = 3;\n"
 "}\0";
 
 const char *fragmentShaderSource = "#version 330 core\n"
@@ -100,10 +100,11 @@ int last_frame_time = 0;
 int lastTime = 0;
 struct nk_context *ctx;
 
-
-void init(void);
-void reshape(void);
-void display(void);
+int option_selected = 0;
+int step_draw = TRUE;
+int selected_vertex = 0;
+int selected_face = 0;
+int selected_edge = 0;
 
 void swapFloat(float* x1 , float* x2){
         float aux = *x1;
@@ -121,7 +122,7 @@ typedef struct Color_RGBA{
 vec3 camera_pos   = {0.0f, 0.0f,  7.0f};
 vec3 camera_front = {0.0f, 0.0f, -1.0f};
 vec3 camera_up    = {0.0f, 1.0f,  0.0f};
-Color_RGBA red_color = {0.85f, 0.02f, 0.12f, 0.5f};
+Color_RGBA red_color   = {0.85f, 0.02f, 0.12f, 0.5f};
 Color_RGBA green_color = {0.20f, 1.0f, 0.69f, 0.5f};
 
 void drawSegmentByLineEquation(float x1, float y1, float z1, float x2, float y2, float z2, const unsigned int resolution, const float point_size_multiplier, const Color_RGBA color){
@@ -145,40 +146,53 @@ void drawSegmentByLineEquation(float x1, float y1, float z1, float x2, float y2,
         }
 
         mat4 model;
-        glm_mat4_identity(model);
+        //glm_mat4_identity(model);
+        mm_mat4_identity(model);
         //glm_scale(model, (vec4){0.1f, 0.1f, 0.1f, 1.0f});
         glm_translate(model, translation);
+        //mm_translate(model, translation);
         if(rotate == TRUE)
                 glm_rotate(model, rotate_speed*((float)SDL_GetTicks()/1000.0f)*GLM_PI*2, (vec3){0.0f, 1.0f, 0.0f});
+                //mm_rotate(model, rotate_speed*((float)SDL_GetTicks()/1000.0f)*MM_PI*2, (vec3){0.0f, 1.0f, 0.0f});
 
-        mat4 view;
-        glm_mat4_identity(view);
+        mat4 view;   // Camera space
+        //glm_mat4_identity(view);
+        mm_mat4_identity(view);
         //glm_translate(view, translation);
 
+        // camera pos global
         vec3 target_dir;
+        vec3 direction; // mouse dir
+        //direction[0] = cos(glm_rad(yaw)) * cos(glm_rad(pitch));
+        //direction[1] = sin(glm_rad(pitch));
+        //direction[2] = sin(glm_rad(yaw)) * cos(glm_rad(pitch));
+        direction[0] = cos(mm_rad(yaw)) * cos(mm_rad(pitch));
+        direction[1] = sin(mm_rad(pitch));
+        direction[2] = sin(mm_rad(yaw)) * cos(mm_rad(pitch));
+        //glm_normalize_to(direction, camera_front);
+        //glm_vec3_add(camera_pos, camera_front, target_dir);
+        mm_normalize_to(direction, camera_front); // mouse dir is normalized to camera front
+        mm_vec3_add(camera_pos, camera_front, target_dir);
+        //glm_lookat(camera_pos, target_dir, camera_up, view);
+        mm_lookat(camera_pos, target_dir, camera_up, view);
 
-        vec3 direction;
-        direction[0] = cos(glm_rad(yaw)) * cos(glm_rad(pitch));
-        direction[1] = sin(glm_rad(pitch));
-        direction[2] = sin(glm_rad(yaw)) * cos(glm_rad(pitch));
-        glm_normalize_to(direction, camera_front);
-        glm_vec3_add(camera_pos, camera_front, target_dir);
-        glm_lookat(camera_pos, target_dir, camera_up, view);
-
-        mat4 proj;
-        glm_mat4_identity(proj);
+        /////////////////////////////////////////////////////////////////////
+        mat4 proj;  // Clip space
+        mm_mat4_identity(proj);
+        //glm_mat4_identity(proj);
         glm_perspective(glm_rad(FOV), (float)SCREEN_WIDTH/(float)SCREEN_HEIGHT, 0.1f, 100.0f, proj);
+        //glm_ortho(-1.0f, 1.0f, -1.0f, 1.0f, 0.1f, 100.0f, proj);
 
         int vertexColorLocation = glGetUniformLocation(shaderProgram, "ourColor");
         int transformLocation   = glGetUniformLocation(shaderProgram, "model");
         int viewLocation        = glGetUniformLocation(shaderProgram, "view");
         int projLocation        = glGetUniformLocation(shaderProgram, "projection");
-        int sizeMultiplier        = glGetUniformLocation(shaderProgram, "sizeMultiplier");
+        int sizeMultiplier      = glGetUniformLocation(shaderProgram, "sizeMultiplier");
         glUseProgram(shaderProgram);
         glUniform4f(vertexColorLocation, color.R, color.G, color.B, color.A);
         glUniformMatrix4fv(transformLocation, 1, GL_FALSE, (const float*)model);
-        glUniformMatrix4fv(viewLocation, 1, GL_FALSE, (const float*)view);
-        glUniformMatrix4fv(projLocation, 1, GL_FALSE, (const float*)proj);
+        glUniformMatrix4fv(viewLocation     , 1, GL_FALSE, (const float*)view);
+        glUniformMatrix4fv(projLocation     , 1, GL_FALSE, (const float*)proj);
         glUniform1f(sizeMultiplier, point_size_multiplier);
         glBindVertexArray(VAO);
         glBindBuffer(GL_ARRAY_BUFFER, VBO);
@@ -358,6 +372,43 @@ void update_edgelist(char***orig, unsigned int* size){
         *orig = items;
 }
 
+void HE_draw(const HE_Object object){
+        HE_Edge_Array   edgeArray = object.edge_array;
+        HE_Vertex_Array verArray  = object.vertex_array;
+        HE_Face_Array   faceArray = object.face_array;
+
+        float scds = 8;  // Time to draw whole figure
+        float cnt = (int)(SDL_GetTicks()/((scds*1000.0f)/edgeArray.size))%(edgeArray.size) + 1;
+        int step = 0;
+
+        if(step_draw == FALSE)
+                cnt = edgeArray.size;
+        for(int e = 0; e <= edgeArray.size; e++){
+                if(step == cnt)
+                        break;
+                int originVertex = edgeArray.array[e].origin_vertex_ID;
+                float x1 = verArray.array[originVertex].x;
+                float y1 = verArray.array[originVertex].y;
+                float z1 = verArray.array[originVertex].z;
+
+                int nextEdge = edgeArray.array[e].nextEdge_ID;
+                int nextVertex = edgeArray.array[nextEdge].origin_vertex_ID;
+                float x2 = verArray.array[nextVertex].x;
+                float y2 = verArray.array[nextVertex].y;
+                float z2 = verArray.array[nextVertex].z;
+                //printf("From v%d to v%d\n", originVertex+1, nextVertex+1);
+                //printf("v%d: %.2f %.2f %.2f\n", originVertex+1, x1, y1, z1);
+                //printf("v%d: %.2f %.2f %.2f\n", nextVertex+1, x2, y2, z2);
+                if (step_draw == FALSE && (originVertex == selected_vertex || nextVertex == selected_vertex) && option_selected == 3){
+                        drawSegmentByLineEquation(x1, y1, z1, x2, y2, z2, 20, 0.4f, (Color_RGBA){0.85f, 0.02f, 0.12f, 1.0f});
+                }else if (step == cnt-1 && step_draw == TRUE){
+                        drawSegmentByLineEquation(x1, y1, z1, x2, y2, z2, 20, 0.4f, (Color_RGBA){0.85f, 0.02f, 0.12f, 1.0f});
+                }else{
+                        drawSegmentByLineEquation(x1, y1, z1, x2, y2, z2, 20, 0.25f, (Color_RGBA){1.0f, 0.6f, 0.133f, 1.0f});
+                }
+                step++;
+        }
+}
 
 void init() {
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
@@ -528,48 +579,6 @@ typedef struct{
         unsigned int size;
 } String;
 
-int option_selected = 0;
-int step_draw = TRUE;
-int selected_vertex = 0;
-int selected_face = 0;
-int selected_edge = 0;
-void HE_draw(const HE_Object object){
-        HE_Edge_Array   edgeArray = object.edge_array;
-        HE_Vertex_Array verArray  = object.vertex_array;
-        HE_Face_Array   faceArray = object.face_array;
-
-        float scds = 8;  // Time to draw whole figure
-        float cnt = (int)(SDL_GetTicks()/((scds*1000.0f)/edgeArray.size))%(edgeArray.size) + 1;
-        int step = 0;
-
-        if(step_draw == FALSE)
-                cnt = edgeArray.size;
-        for(int e = 0; e <= edgeArray.size; e++){
-                if(step == cnt)
-                        break;
-                int originVertex = edgeArray.array[e].origin_vertex_ID;
-                float x1 = verArray.array[originVertex].x;
-                float y1 = verArray.array[originVertex].y;
-                float z1 = verArray.array[originVertex].z;
-
-                int nextEdge = edgeArray.array[e].nextEdge_ID;
-                int nextVertex = edgeArray.array[nextEdge].origin_vertex_ID;
-                float x2 = verArray.array[nextVertex].x;
-                float y2 = verArray.array[nextVertex].y;
-                float z2 = verArray.array[nextVertex].z;
-                //printf("From v%d to v%d\n", originVertex+1, nextVertex+1);
-                //printf("v%d: %.2f %.2f %.2f\n", originVertex+1, x1, y1, z1);
-                //printf("v%d: %.2f %.2f %.2f\n", nextVertex+1, x2, y2, z2);
-                if (step_draw == FALSE && (originVertex == selected_vertex || nextVertex == selected_vertex) && option_selected == 3){
-                        drawSegmentByLineEquation(x1, y1, z1, x2, y2, z2, 20, 0.4f, (Color_RGBA){0.85f, 0.02f, 0.12f, 1.0f});
-                }else if (step == cnt-1 && step_draw == TRUE){
-                        drawSegmentByLineEquation(x1, y1, z1, x2, y2, z2, 20, 0.4f, (Color_RGBA){0.85f, 0.02f, 0.12f, 1.0f});
-                }else{
-                        drawSegmentByLineEquation(x1, y1, z1, x2, y2, z2, 20, 0.25f, (Color_RGBA){1.0f, 0.6f, 0.133f, 1.0f});
-                }
-                step++;
-        }
-}
 
 void draw(const int step){
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
