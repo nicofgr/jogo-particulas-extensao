@@ -15,9 +15,10 @@
 #include <string.h>
 #include <sys/types.h>
 #include <unistd.h> // for wait time
+#include <cglm/cglm.h>
 
 #include "half_edge.h"
-#include "matrix_math.h"
+//#include "matrix_math.h"
 
 // Nuklear
 #define NK_INCLUDE_FIXED_TYPES
@@ -139,31 +140,33 @@ void drawSegmentByLineEquation(float x1, float y1, float z1, float x2, float y2,
         }
 
         mat4 model;
-        mm_mat4_identity(model);
-        //mm_scale(model, (vec3){0.1f, 0.1f, 0.1f});
-        //mm_translate(model, (vec3){-10.0f, -2.0f, 30.0f});
-        //mm_translate(model, translation);
+        //glm_mat4_identity(model);
+        glm_mat4_identity(model);
+        //glm_scale(model, (vec3){0.1f, 0.1f, 0.1f});
+        //glm_translate(model, (vec3){-10.0f, -2.0f, 30.0f});
+        //glm_translate(model, translation);
         if(rotate == FALSE){}
-                mm_rotate(model, rotate_speed*((float)SDL_GetTicks()/1000.0f)*MM_PI*2, (vec3){0.0f, 1.0f, 0.0f});
+                //glm_rotate(model, rotate_speed*((float)SDL_GetTicks()/1000.0f)*MM_PI*2, (vec3){0.0f, 1.0f, 0.0f});
+                glm_rotate(model, rotate_speed*((float)SDL_GetTicks()/1000.0f)*GLM_PI*2, (vec3){0.0f, 1.0f, 0.0f});
 
         mat4 view;   // Camera space
-        mm_mat4_identity(view);
-        //mm_translate(view, translation);
+        glm_mat4_identity(view);
+        //glm_translate(view, translation);
 
         // camera pos global
         vec3 target_dir;
         vec3 direction; // mouse dir
-        direction[0] = cos(mm_rad(yaw)) * cos(mm_rad(pitch));
-        direction[1] = sin(mm_rad(pitch));
-        direction[2] = sin(mm_rad(yaw)) * cos(mm_rad(pitch));
-        mm_normalize_to(direction, camera_front); // mouse dir is normalized to camera front
-        mm_vec3_add(camera_pos, camera_front, target_dir);
-        mm_lookat(camera_pos, target_dir, camera_up, view);
+        direction[0] = cos(glm_rad(yaw)) * cos(glm_rad(pitch));
+        direction[1] = sin(glm_rad(pitch));
+        direction[2] = sin(glm_rad(yaw)) * cos(glm_rad(pitch));
+        glm_normalize_to(direction, camera_front); // mouse dir is normalized to camera front
+        glm_vec3_add(camera_pos, camera_front, target_dir);
+        glm_lookat(camera_pos, target_dir, camera_up, view);
 
         /////////////////////////////////////////////////////////////////////
         mat4 proj;  // Clip space
-        mm_mat4_identity(proj);
-        mm_perspective(mm_rad(FOV), (float)SCREEN_WIDTH/(float)SCREEN_HEIGHT, 0.1f, 100.0f, proj);
+        glm_mat4_identity(proj);
+        glm_perspective(glm_rad(FOV), (float)SCREEN_WIDTH/(float)SCREEN_HEIGHT, 0.1f, 100.0f, proj);
 
         int vertexColorLocation = glGetUniformLocation(shaderProgram, "ourColor");
         int transformLocation   = glGetUniformLocation(shaderProgram, "model");
@@ -207,29 +210,29 @@ void draw_face(const Color_RGBA color, const unsigned int face){
         unsigned int* face_data = HE_get_object_single_face_as_array(current_object, &face_data_size, face);
 
         mat4 model;
-        mm_mat4_identity(model);
+        glm_mat4_identity(model);
         //glm_scale(model, (vec4){0.1f, 0.1f, 0.1f, 1.0f});
-        mm_translate(model, translation);
+        glm_translate(model, translation);
         if(rotate == TRUE)
-                mm_rotate(model, rotate_speed*((float)SDL_GetTicks()/1000.0f)*MM_PI*2, (vec3){0.0f, 1.0f, 0.0f});
+                glm_rotate(model, rotate_speed*((float)SDL_GetTicks()/1000.0f)*GLM_PI*2, (vec3){0.0f, 1.0f, 0.0f});
 
         mat4 view;
-        mm_mat4_identity(view);
-        mm_translate(view, translation);
+        glm_mat4_identity(view);
+        glm_translate(view, translation);
 
         vec3 target_dir;
 
         vec3 direction;
-        direction[0] = cos(mm_rad(yaw)) * cos(mm_rad(pitch));
-        direction[1] = sin(mm_rad(pitch));
-        direction[2] = sin(mm_rad(yaw)) * cos(mm_rad(pitch));
-        mm_normalize_to(direction, camera_front);
-        mm_vec3_add(camera_pos, camera_front, target_dir);
-        mm_lookat(camera_pos, target_dir, camera_up, view);
+        direction[0] = cos(glm_rad(yaw)) * cos(glm_rad(pitch));
+        direction[1] = sin(glm_rad(pitch));
+        direction[2] = sin(glm_rad(yaw)) * cos(glm_rad(pitch));
+        glm_normalize_to(direction, camera_front);
+        glm_vec3_add(camera_pos, camera_front, target_dir);
+        glm_lookat(camera_pos, target_dir, camera_up, view);
 
         mat4 proj;
-        mm_mat4_identity(proj);
-        mm_perspective(mm_rad(FOV), (float)SCREEN_WIDTH/(float)SCREEN_HEIGHT, 0.1f, 100.0f, proj);
+        glm_mat4_identity(proj);
+        glm_perspective(glm_rad(FOV), (float)SCREEN_WIDTH/(float)SCREEN_HEIGHT, 0.1f, 100.0f, proj);
 
         int vertexColorLocation = glGetUniformLocation(shaderProgram, "ourColor");
         int transformLocation   = glGetUniformLocation(shaderProgram, "model");
@@ -498,25 +501,25 @@ void input(int * quit){
         }
         if(states[SDL_SCANCODE_W]){
                 vec3 test;
-                mm_vec3_copy(camera_front, test);
+                glm_vec3_copy(camera_front, test);
                 test[1] = 0.0f;
-                mm_vec3_muladds(test, camera_speed, camera_pos); //pos += (front*spd)
+                glm_vec3_muladds(test, camera_speed, camera_pos); //pos += (front*spd)
         }
         if(states[SDL_SCANCODE_S]){
                 vec3 test;
-                mm_vec3_copy(camera_front, test);
+                glm_vec3_copy(camera_front, test);
                 test[1] = 0.0f;
-                mm_vec3_muladds(test, -camera_speed, camera_pos);
+                glm_vec3_muladds(test, -camera_speed, camera_pos);
         }
         if(states[SDL_SCANCODE_A]){
                 vec3 aux;
-                mm_vec3_crossn(camera_front, camera_up, aux);
-                mm_vec3_muladds(aux, -camera_speed, camera_pos);
+                glm_vec3_crossn(camera_front, camera_up, aux);
+                glm_vec3_muladds(aux, -camera_speed, camera_pos);
         }
         if(states[SDL_SCANCODE_D]){
                 vec3 aux;
-                mm_vec3_crossn(camera_front, camera_up, aux);
-                mm_vec3_muladds(aux, camera_speed, camera_pos);
+                glm_vec3_crossn(camera_front, camera_up, aux);
+                glm_vec3_muladds(aux, camera_speed, camera_pos);
         }
 
         const float sensitivity = 0.25;
