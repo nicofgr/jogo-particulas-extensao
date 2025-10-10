@@ -54,8 +54,9 @@ SDL_GLContext glContext = NULL;
 float yaw = -90.0f;
 float pitch = 0.0f;
 
-const char *vertexShaderSource = "#version 330 core\n"
-"layout (location = 0) in vec3 aPos;\n"
+const char *vertexShaderSource = "#version 100\n"
+//"layout (location = 0) in vec3 aPos;\n"
+"attribute vec3 aPos;\n"
 "uniform mat4 model;\n"
 "uniform mat4 view;\n"
 "uniform mat4 projection;\n"
@@ -63,16 +64,17 @@ const char *vertexShaderSource = "#version 330 core\n"
 "void main()\n"
 "{\n"
 "   gl_Position = projection*view*model*vec4(aPos.x, aPos.y, aPos.z, 1.0);\n"
-"   gl_PointSize = min((50*sizeMultiplier)/gl_Position.z, 400.0f);\n"
-"   gl_PointSize = 3;\n"
+"   gl_PointSize = 3.0;\n"
 "}\0";
 
-const char *fragmentShaderSource = "#version 330 core\n"
-"out vec4 FragColor;\n"
+const char *fragmentShaderSource = "#version 100\n"
+"precision mediump float;\n"
+//"out vec4 FragColor;\n"
 "uniform vec4 ourColor;\n"
 "void main()\n"
 "{\n"
-"   FragColor = ourColor;\n"
+//"   FragColor = ourColor;\n"
+"   gl_FragColor = ourColor;\n"
 "}\0";
 
 unsigned int vertexShader;
@@ -174,7 +176,7 @@ void drawSegmentByLineEquation(float x1, float y1, float z1, float x2, float y2,
         glUniformMatrix4fv(viewLocation     , 1, GL_FALSE, (const float*)view);
         glUniformMatrix4fv(projLocation     , 1, GL_FALSE, (const float*)proj);
         glUniform1f(sizeMultiplier, point_size_multiplier);
-        glBindVertexArray(VAO);
+        //glBindVertexArray(VAO);
         glBindBuffer(GL_ARRAY_BUFFER, VBO);
         glBufferData(GL_ARRAY_BUFFER, sizeof(verts), verts, GL_STATIC_DRAW);
 
@@ -241,7 +243,7 @@ void draw_face(const Color_RGBA color, const unsigned int face){
         glUniformMatrix4fv(projLocation, 1, GL_FALSE, (const float*)proj);
         glUniform1f(sizeMultiplier, 1);
 
-        glBindVertexArray(VAO_faces);
+        //glBindVertexArray(VAO_faces);
 
         glBindBuffer(GL_ARRAY_BUFFER, VBO_faces);
         glBufferData(GL_ARRAY_BUFFER, sizeof(float)*size, verts, GL_STATIC_DRAW);
@@ -435,15 +437,15 @@ void init() {
         glDeleteShader(fragmentShader);
 
 
-        glGenVertexArrays(1, &VAO);
+        //glGenVertexArrays(1, &VAO);
         glGenBuffers(1, &VBO);
 
-        glGenVertexArrays(1, &VAO_faces);
+        //glGenVertexArrays(1, &VAO_faces);
         glGenBuffers(1, &VBO_faces);
         glGenBuffers(1, &EBO_faces);
 
 
-        glBindVertexArray(VAO);
+        //glBindVertexArray(VAO);
         /**
           glBindBuffer(GL_ARRAY_BUFFER, VBO);
           glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
@@ -454,7 +456,7 @@ void init() {
 
         current_object = HE_load("test.obj");
 }
-int update_item = FALSE;
+int update_item = TRUE;
 
 void input(int * quit){
         SDL_Event e;
@@ -626,15 +628,12 @@ int main(int argc, char** argv) {
 
         char** items = NULL;
         unsigned int list_size = 0;
-        update_itemlist(&items, &list_size);
 
         char** face_list = NULL;
         unsigned int face_list_size = 0;
-        update_facelist(&face_list, &face_list_size);
         
         char** edge_list = NULL;
         unsigned int edge_list_size = 0;
-        update_edgelist(&edge_list, &edge_list_size);
 
         /**
         ctx = nk_sdl_init(glWindow);
@@ -690,10 +689,8 @@ int main(int argc, char** argv) {
 
         }
         //nk_sdl_shutdown();
-        SDL_GL_DeleteContext(glContext);
-        SDL_DestroyWindow(glWindow);
-        SDL_Quit();
-        free(opened_file);
+        if(opened_file != NULL)
+                free(opened_file);
         free(current_object.vertex_array.array);
         free(current_object.face_array.array);
         free(current_object.edge_array.array);
@@ -706,5 +703,8 @@ int main(int argc, char** argv) {
         for(int i = 0; i < edge_list_size; i++)
                 free(edge_list[i]);
         free(edge_list);
+        SDL_GL_DeleteContext(glContext);
+        SDL_DestroyWindow(glWindow);
+        SDL_Quit();
         return 0;
 }
