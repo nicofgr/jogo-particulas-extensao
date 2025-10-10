@@ -32,8 +32,8 @@
 #define NK_KEYSTATE_BASED_INPUT
 #define MAX_VERTEX_BUFFER 512 * 1024
 #define MAX_ELEMENT_BUFFER 128 * 1024
-#include "nuklear/nuklear.h"
-#include "nuklear/nuklear_sdl_gl3.h"
+//#include "nuklear/nuklear.h"
+//#include "nuklear/nuklear_sdl_gl3.h"
 
 // My defines
 #define SCREEN_WIDTH   800
@@ -392,8 +392,8 @@ void HE_draw(const HE_Object object){
 
 void init() {
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-        glEnable(GL_PROGRAM_POINT_SIZE);
-        glEnable(GL_MULTISAMPLE);
+        //glEnable(GL_PROGRAM_POINT_SIZE);
+        //glEnable(GL_MULTISAMPLE);
         glEnable(GL_DEPTH_TEST);
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -458,7 +458,7 @@ int update_item = FALSE;
 
 void input(int * quit){
         SDL_Event e;
-        nk_input_begin(ctx);
+        //nk_input_begin(ctx);
         const float camera_speed = 0.1f;
         const Uint8* states = SDL_GetKeyboardState(NULL);
         while(SDL_PollEvent(&e)){
@@ -492,7 +492,7 @@ void input(int * quit){
                                 SDL_free(e.drop.file);
                                 break;
                 }
-                nk_sdl_handle_event(&e);
+                //nk_sdl_handle_event(&e);
         }
         if(states[SDL_SCANCODE_W]){
                 vec3 test;
@@ -533,8 +533,8 @@ void input(int * quit){
         printf("Fnt: %.2f, %.2f, %.2f\n", camera_front[0], camera_front[1], camera_front[2]);
         printf("Up:  %.2f, %.2f, %.2f\n\n", camera_up[0], camera_up[1], camera_up[2]);
         }
-        nk_sdl_handle_grab();
-        nk_input_end(ctx);
+        //nk_sdl_handle_grab();
+        //nk_input_end(ctx);
 }
 
 void update(int* step){
@@ -588,14 +588,14 @@ int main(int argc, char** argv) {
                 exit(1);
         }
 
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
         SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
         SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
         SDL_GL_SetAttribute(SDL_GL_MULTISAMPLEBUFFERS, 1);
         SDL_GL_SetAttribute(SDL_GL_MULTISAMPLESAMPLES, 4);
-        glWindow = SDL_CreateWindow("OpenGL 3.3", 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_OPENGL);
+        glWindow = SDL_CreateWindow("OpenGL ES 2.0", 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, SDL_WINDOW_OPENGL);
         if(glWindow == NULL){
                 printf("Error creating window\n");
                 exit(1);
@@ -607,7 +607,12 @@ int main(int argc, char** argv) {
                 exit(1);
         }
 
+        /**
         if(!gladLoadGLLoader(SDL_GL_GetProcAddress)){
+                puts("glad was not initialized");
+                exit(1);
+        }**/
+        if(!gladLoadGLES2Loader(SDL_GL_GetProcAddress)){
                 puts("glad was not initialized");
                 exit(1);
         }
@@ -631,10 +636,12 @@ int main(int argc, char** argv) {
         unsigned int edge_list_size = 0;
         update_edgelist(&edge_list, &edge_list_size);
 
+        /**
         ctx = nk_sdl_init(glWindow);
         {struct nk_font_atlas *atlas;
         nk_sdl_font_stash_begin(&atlas);
         nk_sdl_font_stash_end();}
+        **/
         while(quit == FALSE){
                 input(&quit);
                 if(update_item == TRUE){
@@ -646,6 +653,7 @@ int main(int argc, char** argv) {
                         selected_edge = 0;
                         selected_face = 0;
                 }
+                /**
                 // ===== GUI ===================
                 if (nk_begin(ctx, "MENU", nk_rect(50, 50, 230, 250), NK_WINDOW_BORDER|NK_WINDOW_MOVABLE|NK_WINDOW_SCALABLE|NK_WINDOW_MINIMIZABLE|NK_WINDOW_TITLE)){
                         nk_layout_row_dynamic(ctx, 40, 1);
@@ -670,18 +678,18 @@ int main(int argc, char** argv) {
                                         selected_vertex = nk_combo(ctx, (const char* const*)items, list_size, selected_vertex, 25, nk_vec2(200,200));
                                 //if(nk_button_label(ctx,"Vert"));
                         }
-                }
+                }**/
 
                 update(&counter);
-                nk_end(ctx);
+                //nk_end(ctx);
 
                 draw(counter);
-                nk_sdl_render(NK_ANTI_ALIASING_ON, MAX_VERTEX_BUFFER, MAX_ELEMENT_BUFFER);
+                //nk_sdl_render(NK_ANTI_ALIASING_ON, MAX_VERTEX_BUFFER, MAX_ELEMENT_BUFFER);
                 SDL_GL_SwapWindow(glWindow);
                 //quit = TRUE;
 
         }
-        nk_sdl_shutdown();
+        //nk_sdl_shutdown();
         SDL_GL_DeleteContext(glContext);
         SDL_DestroyWindow(glWindow);
         SDL_Quit();
