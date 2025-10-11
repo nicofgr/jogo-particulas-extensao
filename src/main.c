@@ -18,7 +18,6 @@
 #include <cglm/cglm.h>
 
 #include "cglm/cam.h"
-//#include "matrix_math.h"
 
 // Nuklear
 #define NK_INCLUDE_FIXED_TYPES
@@ -56,7 +55,6 @@ float yaw = -90.0f;
 float pitch = 0.0f;
 
 const char *vertexShaderSource = "#version 100\n"
-//"layout (location = 0) in vec3 aPos;\n"
 "attribute vec3 aPos;\n"
 "uniform mat4 model;\n"
 "uniform mat4 view;\n"
@@ -72,15 +70,14 @@ const char *vertexShaderSource = "#version 100\n"
 
 const char *fragmentShaderSource = "#version 100\n"
 "precision mediump float;\n"
-//"out vec4 FragColor;\n"
 "varying vec3 pos;\n"
 "uniform vec4 ourColor;\n"
 "void main()\n"
 "{\n"
-//"   FragColor = ourColor;\n"
-"   gl_FragColor = ourColor;\n"
-"   if (dot(pos,pos) > 0.20)\n"
-"      discard;\n"
+"   float radius = 0.25;\n"
+"   float dist = length(pos);\n"
+"   float alpha = 1.0 - smoothstep(radius, radius+0.05, dist);\n"
+"   gl_FragColor = ourColor * vec4(1.0, 1.0, 1.0, alpha);\n"
 "}\0";
 
 unsigned int vertexShader;
@@ -117,12 +114,18 @@ Color_RGBA red_color   = {0.85f, 0.02f, 0.12f, 0.5f};
 Color_RGBA green_color = {0.20f, 1.0f, 0.69f, 0.5f};
 
 
+typedef struct{
+        vec2 position;
+        vec2 velocity;
+        Color_RGBA color;
+}Particle;
 
-void draw_particle(const vec3 position){
+void draw_particle(const Particle particle){
+        vec3 position = {particle.position[0], particle.position[1], 0.0f};
         float verts[] = {-1.0f, -1.0f, 0.0f,
                           0.0f, 1.0f, 0.0f,
                           1.0f, -1.0f, 0.0f};
-        Color_RGBA color = {255,255,255,255};
+        Color_RGBA color = particle.color;
         const float point_size_multiplier = 1;
 
         mat4 model;
@@ -233,8 +236,6 @@ void init() {
         glEnableVertexAttribArray(0);
 
 }
-int update_item = TRUE;
-
 void input(int * quit){
         SDL_Event e;
         //nk_input_begin(ctx);
@@ -281,12 +282,8 @@ void input(int * quit){
         //nk_input_end(ctx);
 }
 
-typedef struct{
-        vec2 position;
-        vec2 velocity;
-}particle;
 
-void update(int* step, vec3 position){
+void update(int* step, Particle* particle){
 
         int wait_time = FRAME_TARGET_TIME - (SDL_GetTicks() - last_frame_time);
         if(wait_time > 0 && wait_time <= FRAME_TARGET_TIME)
@@ -302,7 +299,13 @@ void update(int* step, vec3 position){
                 lastTime = SDL_GetTicks();
         }
 
-        position[0] = 0.5f;
+        particle->position[0] += particle->velocity[0]*delta_time;
+        particle->position[1] += particle->velocity[1]*delta_time;
+
+        if(particle->position[0] >= 1) particle->velocity[0] *= -1;
+        if(particle->position[0] <= -1) particle->velocity[0] *= -1;
+        if(particle->position[1] >= 1) particle->velocity[1] *= -1;
+        if(particle->position[1] <= -1) particle->velocity[1] *= -1;
 }
 
 typedef struct{
@@ -311,13 +314,13 @@ typedef struct{
 } String;
 
 
-void draw(const int step, const vec3 position){
+void draw(const int step, const Particle particle){
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         glEnable(GL_DEPTH_TEST);
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-        draw_particle(position);
+        draw_particle(particle);
 }
 
 int main(int argc, char** argv) {
@@ -363,14 +366,19 @@ int main(int argc, char** argv) {
         nk_sdl_font_stash_begin(&atlas);
         nk_sdl_font_stash_end();}
         **/
-        vec3 position = {0.0f, 0.0f, 0.0f};
+        Particle particle;
+        particle.position[0] = 0.0f;
+        particle.position[1] = 0.0f;
+        particle.color = red_color;
+        particle.velocity[0] = 0.3f;
+        particle.velocity[1] = 0.2f;
         while(quit == FALSE){
                 input(&quit);
 
-                update(&counter, position);
+                update(&counter, &particle);
                 //nk_end(ctx);
 
-                draw(counter, position);
+                draw(counter, particle);
                 //nk_sdl_render(NK_ANTI_ALIASING_ON, MAX_VERTEX_BUFFER, MAX_ELEMENT_BUFFER);
                 SDL_GL_SwapWindow(glWindow);
         }
