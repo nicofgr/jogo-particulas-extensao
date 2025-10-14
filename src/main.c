@@ -18,6 +18,8 @@
 #include <cglm/cglm.h>
 
 #include "cglm/cam.h"
+#include "cglm/vec2.h"
+#include "cglm/vec3.h"
 
 // Nuklear
 #define NK_INCLUDE_FIXED_TYPES
@@ -72,12 +74,17 @@ const char *fragmentShaderSource = "#version 100\n"
 "precision mediump float;\n"
 "varying vec3 pos;\n"
 "uniform vec4 ourColor;\n"
+"uniform float time;\n"
+"uniform int identifier;\n"
 "void main()\n"
 "{\n"
-"   float radius = 0.25;\n"
+"   const float M_PI = 3.141592;\n"
+"   float radius = 0.35;\n"
 "   float dist = length(pos);\n"
-"   float alpha = 1.0 - smoothstep(radius, radius+0.05, dist);\n"
-"   gl_FragColor = ourColor * vec4(1.0, 1.0, 1.0, alpha);\n"
+"   float alpha = 1.0 - smoothstep(radius-0.3, radius, dist);\n"
+"   float frequency = 2.0*M_PI*dist;\n"
+"   alpha *= (sin(frequency*8.0 - time*20.0 + float(identifier)*2.718)-1.0)/13.33 + 1.0;\n"
+"   gl_FragColor = vec4(ourColor.xyz*alpha, alpha);\n"
 "}\0";
 
 unsigned int vertexShader;
@@ -120,8 +127,8 @@ typedef struct{
         Color_RGBA color;
 }Particle;
 
-void draw_particle(const Particle particle){
-        vec3 position = {particle.position[0], particle.position[1], 0.0f};
+void draw_particle(const Particle particle, int ID){
+        vec3 position = {particle.position[0], particle.position[1]/1.33, 0.0f};
         float verts[] = {-1.0f, -1.0f, 0.0f,
                           0.0f, 1.0f, 0.0f,
                           1.0f, -1.0f, 0.0f};
@@ -130,7 +137,8 @@ void draw_particle(const Particle particle){
 
         mat4 model;
         glm_mat4_identity(model);
-        glm_scale(model, (vec3){0.5f, 0.5f, 1.0f});
+        glm_scale(model, (vec3){0.1f, 0.1f, 1.0f});
+        //glm_scale(model, (vec3){0.2f, 0.2f, 1.0f});
 
         mat4 world;
         glm_mat4_identity(world);
@@ -157,12 +165,16 @@ void draw_particle(const Particle particle){
         int viewLocation        = glGetUniformLocation(shaderProgram, "view");
         int projLocation        = glGetUniformLocation(shaderProgram, "projection");
         int sizeMultiplier      = glGetUniformLocation(shaderProgram, "sizeMultiplier");
+        int time                = glGetUniformLocation(shaderProgram, "time");
+        int part_ID             = glGetUniformLocation(shaderProgram, "identifier");
         glUseProgram(shaderProgram);
         glUniform4f(vertexColorLocation, color.R, color.G, color.B, color.A);
         glUniformMatrix4fv(transformLocation, 1, GL_FALSE, (const float*)model);
         glUniformMatrix4fv(viewLocation     , 1, GL_FALSE, (const float*)view);
         glUniformMatrix4fv(projLocation     , 1, GL_FALSE, (const float*)proj);
         glUniform1f(sizeMultiplier, point_size_multiplier);
+        glUniform1f(time, last_frame_time/1000.0f);
+        glUniform1i(part_ID, ID);
 
         glBindBuffer(GL_ARRAY_BUFFER, VBO);
         glBufferData(GL_ARRAY_BUFFER, sizeof(float)*9, verts, GL_STATIC_DRAW);
@@ -282,8 +294,37 @@ void input(int * quit){
         //nk_input_end(ctx);
 }
 
+typedef struct{
+        Particle* particle;
+        unsigned int size;
+}Particle_Array;
 
-void update(int* step, Particle* particle){
+void particle_array_push(Particle_Array* array, Particle particle){
+        if( array->size == 0){
+                array->particle = (Particle*)malloc(sizeof(Particle));
+                array->particle[0] = particle;
+                array->size++;
+                return;
+        }
+        array->particle = (Particle*)realloc(array->particle, sizeof(Particle)*(array->size+1));
+        array->particle[array->size] = particle;
+        array->size++;
+        return;
+}
+
+void create_random_particles(Particle_Array* array, const unsigned int quantity){
+        for(int i = 0; i < quantity; i++){
+                Particle particle;
+                particle.position[0] = ((rand() % 98)-49)/55.0f;
+                particle.position[1] = ((rand() % 98)-49)/55.0f;
+                particle.color = red_color;
+                particle.velocity[0] = 0.0f;
+                particle.velocity[1] = 0.0f;
+                particle_array_push(array, particle);
+        }
+}
+
+void update( Particle_Array particles){
 
         int wait_time = FRAME_TARGET_TIME - (SDL_GetTicks() - last_frame_time);
         if(wait_time > 0 && wait_time <= FRAME_TARGET_TIME)
@@ -292,20 +333,54 @@ void update(int* step, Particle* particle){
         float delta_time = (SDL_GetTicks() - last_frame_time) / 1000.0f;
         last_frame_time = SDL_GetTicks();
 
-        *step = 0;
-        float currentTime = SDL_GetTicks();
-        if(currentTime - lastTime >= 500.0f){ // Updates every x seconds
-                *step = 1;
-                lastTime = SDL_GetTicks();
+        for(int i = 0; i < particles.size; i++){
+                Particle part1 = particles.particle[i];
+                vec2 force = {0.0f, 0.0f};
+
+                // UPDATE FORCES
+                for(int j = 0; j < particles.size; j++){
+                        if(i == j) continue;
+                        Particle part2 = particles.particle[j];
+                        vec2 forceDir;
+                        glm_vec2_sub(part1.position, part2.position, forceDir);
+                        glm_vec2_norm(forceDir);
+
+                        float dist_squared = glm_vec2_distance2(part1.position, part2.position);
+                        float maxForce = 1.0; // <<
+                        float minDist = 0.1;
+                        float forceMag = - (maxForce*minDist*minDist)/dist_squared;
+                        if(dist_squared < minDist*minDist){
+                                forceMag = -forceMag + 2*maxForce ;
+                        }
+
+                        glm_vec2_scale(forceDir, forceMag, forceDir);
+                        glm_vec2_add(force, forceDir, force);
+
+                }
+                vec2 drag = {0.0f, 0.0f};
+                glm_vec2_copy(part1.velocity, drag);
+                glm_vec2_negate(drag);
+                glm_vec2_scale(drag, 0.5, drag);
+                glm_vec2_add(force, drag, force);
+
+                // UPDATE VELOCITIES
+                glm_vec2_scale(force, delta_time, force);
+                glm_vec2_add(part1.velocity, force, part1.velocity); 
+                particles.particle[i] = part1;
+
+                // UPDATE POSITIONS
+                if(delta_time > 1.0) return;
+                particles.particle[i].position[0] += particles.particle[i].velocity[0]*delta_time;
+                particles.particle[i].position[1] += particles.particle[i].velocity[1]*delta_time;
+
+                // BOUNDARIES
+                vec2 velocity;
+                glm_vec2_copy(particles.particle[i].velocity, velocity);
+                if(particles.particle[i].position[0] > 1 && velocity[0] > 0) particles.particle[i].velocity[0] *= -1;
+                if(particles.particle[i].position[0] < -1 && velocity[0] < 0) particles.particle[i].velocity[0] *= -1;
+                if(particles.particle[i].position[1] > 1 && velocity[1] > 0) particles.particle[i].velocity[1] *= -1;
+                if(particles.particle[i].position[1] < -1 && velocity[1] < 0) particles.particle[i].velocity[1] *= -1;
         }
-
-        particle->position[0] += particle->velocity[0]*delta_time;
-        particle->position[1] += particle->velocity[1]*delta_time;
-
-        if(particle->position[0] >= 1) particle->velocity[0] *= -1;
-        if(particle->position[0] <= -1) particle->velocity[0] *= -1;
-        if(particle->position[1] >= 1) particle->velocity[1] *= -1;
-        if(particle->position[1] <= -1) particle->velocity[1] *= -1;
 }
 
 typedef struct{
@@ -314,13 +389,18 @@ typedef struct{
 } String;
 
 
-void draw(const int step, const Particle particle){
+void draw(const Particle_Array particles){
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         glEnable(GL_DEPTH_TEST);
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-        draw_particle(particle);
+        glDepthMask(GL_FALSE); // Disable for particles because it shows their triangles
+                for(int i = 0; i < particles.size; i++){
+                draw_particle(particles.particle[i], i);
+        }
+        glDepthMask(GL_TRUE);
+        SDL_GL_SwapWindow(glWindow);
 }
 
 int main(int argc, char** argv) {
@@ -366,21 +446,17 @@ int main(int argc, char** argv) {
         nk_sdl_font_stash_begin(&atlas);
         nk_sdl_font_stash_end();}
         **/
-        Particle particle;
-        particle.position[0] = 0.0f;
-        particle.position[1] = 0.0f;
-        particle.color = red_color;
-        particle.velocity[0] = 0.3f;
-        particle.velocity[1] = 0.2f;
+
+        Particle_Array particles = {NULL, 0};
+        create_random_particles(&particles,10);
         while(quit == FALSE){
                 input(&quit);
 
-                update(&counter, &particle);
+                update(particles);
                 //nk_end(ctx);
 
-                draw(counter, particle);
+                draw(particles);
                 //nk_sdl_render(NK_ANTI_ALIASING_ON, MAX_VERTEX_BUFFER, MAX_ELEMENT_BUFFER);
-                SDL_GL_SwapWindow(glWindow);
         }
         //nk_sdl_shutdown();
         SDL_GL_DeleteContext(glContext);
