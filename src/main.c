@@ -45,6 +45,28 @@
 #define TARGET_FPS 60
 #define FRAME_TARGET_TIME 1000/TARGET_FPS
 #define FOV 70
+#define SPEED_OF_C 1
+
+typedef enum {
+        QUARK_UP,
+        QUARK_DOWN,
+        QUARK_CHARM,
+        QUARK_STRANGE,
+        QUARK_TOP,
+        QUARK_BOTTOM,
+        ELECTRON,
+        MUON,
+        TAU,
+        NEUTRINO_ELECTRON,
+        NEUTRINO_MUON,
+        NEUTRINO_TAU,
+        GLUON,
+        PHOTON,
+        BOSON_Z,
+        BOSON_W,
+        HIGGS,
+        GRAVITON
+}Particle_Type;
 
 int rotate = TRUE;
 float rotate_speed = -1.0f/30; // frequency
@@ -61,7 +83,6 @@ const char *vertexShaderSource = "#version 100\n"
 "uniform mat4 model;\n"
 "uniform mat4 view;\n"
 "uniform mat4 projection;\n"
-"uniform float sizeMultiplier;\n"
 "varying vec3 pos;\n"
 "void main()\n"
 "{\n"
@@ -101,11 +122,6 @@ int last_frame_time = 0;
 int lastTime = 0;
 struct nk_context *ctx;
 
-int option_selected = 0;
-int step_draw = TRUE;
-int selected_vertex = 0;
-int selected_face = 0;
-int selected_edge = 0;
 
 typedef struct Color_RGBA{
         float R;
@@ -114,30 +130,75 @@ typedef struct Color_RGBA{
         float A;
 }Color_RGBA;
 
+typedef struct{
+        vec2 position;
+        vec2 velocity;
+        Particle_Type type;
+        int isAntiparticle;
+}Particle;
+
+typedef struct{
+        Particle* particle;
+        unsigned int size;
+}Particle_Array;
+
 vec3 camera_pos   = {0.0f, 0.0f,  7.0f};
 vec3 camera_front = {0.0f, 0.0f, -1.0f};
 vec3 camera_up    = {0.0f, 1.0f,  0.0f};
 Color_RGBA red_color   = {0.85f, 0.02f, 0.12f, 0.5f};
+Color_RGBA color_blue  = {0.12f, 0.12f, 0.85f,1.0f};
 Color_RGBA green_color = {0.20f, 1.0f, 0.69f, 0.5f};
-
-
-typedef struct{
-        vec2 position;
-        vec2 velocity;
-        Color_RGBA color;
-}Particle;
+Color_RGBA color_purple = {0.9f, 0.7f, 0.98f};
+Color_RGBA color_green2 = {0.56f, 0.88f, 0.36f};
+Color_RGBA color_orange = {0.96f, 0.52f, 0.4f};
+Color_RGBA color_yellow = {0.93f, 0.85f, 0.39f};
 
 void draw_particle(const Particle particle, int ID){
         vec3 position = {particle.position[0], particle.position[1]/1.33, 0.0f};
         float verts[] = {-1.0f, -1.0f, 0.0f,
                           0.0f, 1.0f, 0.0f,
                           1.0f, -1.0f, 0.0f};
-        Color_RGBA color = particle.color;
-        const float point_size_multiplier = 1;
+
+        Color_RGBA color;
+        switch(particle.type){
+                case QUARK_UP:
+                case QUARK_DOWN:
+                case QUARK_CHARM:
+                case QUARK_STRANGE:
+                case QUARK_TOP:
+                case QUARK_BOTTOM:
+                        color = color_purple;
+                        break;
+                case ELECTRON:
+                case MUON:
+                case TAU:
+                case NEUTRINO_ELECTRON:
+                case NEUTRINO_MUON:
+                case NEUTRINO_TAU:
+                        color = color_green2;
+                        break;
+                case GLUON:
+                case PHOTON:
+                case BOSON_Z:
+                case BOSON_W:
+                case GRAVITON:
+                        color = color_orange;
+                case HIGGS:
+                        color = color_yellow;
+                default:
+                        break;
+        }
+
+        if(particle.isAntiparticle == TRUE){
+                color.R = 1.0f - color.R;
+                color.G = 1.0f - color.G;
+                color.B = 1.0f - color.B;
+        }
 
         mat4 model;
         glm_mat4_identity(model);
-        glm_scale(model, (vec3){0.1f, 0.1f, 1.0f});
+        //glm_scale(model, (vec3){0.1f, 0.1f, 1.0f});
+        glm_scale(model, (vec3){0.05f, 0.05f, 1.0f});
         //glm_scale(model, (vec3){0.2f, 0.2f, 1.0f});
 
         mat4 world;
@@ -172,7 +233,6 @@ void draw_particle(const Particle particle, int ID){
         glUniformMatrix4fv(transformLocation, 1, GL_FALSE, (const float*)model);
         glUniformMatrix4fv(viewLocation     , 1, GL_FALSE, (const float*)view);
         glUniformMatrix4fv(projLocation     , 1, GL_FALSE, (const float*)proj);
-        glUniform1f(sizeMultiplier, point_size_multiplier);
         glUniform1f(time, last_frame_time/1000.0f);
         glUniform1i(part_ID, ID);
 
@@ -184,6 +244,9 @@ void draw_particle(const Particle particle, int ID){
 
         glDrawArrays(GL_TRIANGLES, 0 , 3);
 }
+
+Particle_Array photons = {NULL, 0};
+Particle_Array mesons  = {NULL, 0};
 
 void init() {
         srand(SDL_GetTicks());
@@ -248,6 +311,7 @@ void init() {
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
         glEnableVertexAttribArray(0);
 
+
 }
 void input(int * quit){
         SDL_Event e;
@@ -295,11 +359,6 @@ void input(int * quit){
         //nk_input_end(ctx);
 }
 
-typedef struct{
-        Particle* particle;
-        unsigned int size;
-}Particle_Array;
-
 void particle_array_push(Particle_Array* array, Particle particle){
         if( array->size == 0){
                 array->particle = (Particle*)malloc(sizeof(Particle));
@@ -318,11 +377,52 @@ void create_random_particles(Particle_Array* array, const unsigned int quantity)
                 Particle particle;
                 particle.position[0] = ((rand() % 98)-49)/50.0f;
                 particle.position[1] = ((rand() % 98)-49)/50.0f;
-                particle.color = red_color;
                 particle.velocity[0] = ((rand() % 100)-50)/50.0f;
                 particle.velocity[1] = ((rand() % 100)-50)/50.0f;
+                particle.type = QUARK_UP;
                 particle_array_push(array, particle);
         }
+}
+
+void spawn_particle(Particle_Array* particles, Particle_Type type, int isAnti, vec2 position, vec2 velocity){
+        Particle new_particle;
+        new_particle.type = type;
+        glm_vec2_copy(position, new_particle.position);
+        glm_vec2_copy(velocity, new_particle.velocity);
+        new_particle.isAntiparticle = isAnti;
+        particle_array_push(particles, new_particle);
+}
+
+void spawn_meson(vec2 position1, vec2 velocity1, vec2 position2, vec2 velocity2){
+        spawn_particle(&mesons, QUARK_UP, 0, position1, velocity1);
+        spawn_particle(&mesons, QUARK_UP, 1, position2, velocity2);
+}
+// When destroying copy the last place to here and pop it
+
+void check_boundaries(Particle_Array particles){
+        for(int i = 0; i < particles.size; i++){
+                vec2 velocity;
+                glm_vec2_copy(particles.particle[i].velocity, velocity);
+                if(particles.particle[i].position[0] > 1 && velocity[0] > 0) particles.particle[i].velocity[0] *= -1;
+                if(particles.particle[i].position[0] < -1 && velocity[0] < 0) particles.particle[i].velocity[0] *= -1;
+                if(particles.particle[i].position[1] > 1 && velocity[1] > 0) particles.particle[i].velocity[1] *= -1;
+                if(particles.particle[i].position[1] < -1 && velocity[1] < 0) particles.particle[i].velocity[1] *= -1;
+        }
+}
+
+void strong_force_produce_pair(){
+}
+
+void update_photons(float delta_time){
+        for(int i = 0; i < photons.size; i++){
+                Particle part1 = photons.particle[i];
+                glm_vec2_normalize(part1.velocity);
+                glm_vec2_scale(part1.velocity, SPEED_OF_C, part1.velocity);
+                photons.particle[i] = part1;
+                photons.particle[i].position[0] += photons.particle[i].velocity[0]*delta_time;
+                photons.particle[i].position[1] += photons.particle[i].velocity[1]*delta_time;
+        }
+        check_boundaries(photons);
 }
 
 void update( Particle_Array particles){
@@ -334,14 +434,22 @@ void update( Particle_Array particles){
         float delta_time = (SDL_GetTicks() - last_frame_time) / 1000.0f;
         last_frame_time = SDL_GetTicks();
 
+        float currentTime = SDL_GetTicks();
+        if(currentTime - lastTime >= 1*1000.0f){
+                lastTime = currentTime;
+                //spawn_particle(&photons, PHOTON, 0, (vec2){0.0f,0.0f}, (vec2){10.0f,10.0f});
+        }
+
         if(delta_time > 0.05) return;
 
-        vec2 test;
+        update_photons(delta_time);
+
+        // UPDATE FORCES
+        // Strong force between 3 quarks
         if(particles.size % 3 != 0) exit(1); // Nucleons need 3 quarks
         for(int i = 0; i < particles.size/3; i++){
                 vec2 force[] = {{0.0f, 0.0f}, {0.0f, 0.0f}, {0.0f, 0.0f}};
 
-                // UPDATE FORCES
                 Particle part[3];
                 part[0] = particles.particle[i*3];
                 part[1] = particles.particle[i*3 + 1];
@@ -350,7 +458,6 @@ void update( Particle_Array particles){
                 for(int j = 0; j < 3; j++){
                         vec2 forceDir;
                         int k = (j+1) % 3;
-                        printf("%d %d\n", j, k);
                         glm_vec2_sub(part[j].position, part[k].position, forceDir);
                         glm_vec2_norm(forceDir);
 
@@ -365,7 +472,6 @@ void update( Particle_Array particles){
                         glm_vec2_add(force[j], forceDir, force[j]);
                         glm_vec2_sub(force[k], forceDir, force[k]);
                 }
-                puts("");
 
                 for(int j = 0; j < 3; j++){
                         // Drag
@@ -380,32 +486,26 @@ void update( Particle_Array particles){
                         glm_vec2_add(part[j].velocity, force[j], part[j].velocity); 
 
                         // Max Velocity
-                        float max_vel = 1;
                         float mag_squared = glm_vec2_norm2(part[j].velocity);
-                        if(mag_squared > pow(max_vel,2)){
+                        if(mag_squared > pow(SPEED_OF_C,2)){
                                 glm_vec2_normalize(part[j].velocity);
-                                glm_vec2_scale(part[j].velocity, max_vel, part[j].velocity);
+                                glm_vec2_scale(part[j].velocity, SPEED_OF_C, part[j].velocity);
                         }
                 }
+                //printf("%.2f %.2f\n", part[0].velocity[0], part[0].velocity[1]);
                 particles.particle[i*3]     = part[0];
                 particles.particle[i*3 + 1] = part[1];
                 particles.particle[i*3 + 2] = part[2];
         }
 
+        // UPDATE POSITIONS
         for(int i = 0; i < particles.size; i++){
                 Particle part1 = particles.particle[i];
-                // UPDATE POSITIONS
                 particles.particle[i].position[0] += particles.particle[i].velocity[0]*delta_time;
                 particles.particle[i].position[1] += particles.particle[i].velocity[1]*delta_time;
-
-                // BOUNDARIES
-                vec2 velocity;
-                glm_vec2_copy(particles.particle[i].velocity, velocity);
-                if(particles.particle[i].position[0] > 1 && velocity[0] > 0) particles.particle[i].velocity[0] *= -1;
-                if(particles.particle[i].position[0] < -1 && velocity[0] < 0) particles.particle[i].velocity[0] *= -1;
-                if(particles.particle[i].position[1] > 1 && velocity[1] > 0) particles.particle[i].velocity[1] *= -1;
-                if(particles.particle[i].position[1] < -1 && velocity[1] < 0) particles.particle[i].velocity[1] *= -1;
         }
+        // BOUNDARIES
+        check_boundaries(particles);
 }
 
 typedef struct{
@@ -421,8 +521,11 @@ void draw(const Particle_Array particles){
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
         glDepthMask(GL_FALSE); // Disable for particles because it shows their triangles
-                for(int i = 0; i < particles.size; i++){
+        for(int i = 0; i < particles.size; i++){
                 draw_particle(particles.particle[i], i);
+        }
+        for(int i = 0; i < photons.size; i++){
+                draw_particle(photons.particle[i], i);
         }
         glDepthMask(GL_TRUE);
         SDL_GL_SwapWindow(glWindow);
@@ -473,7 +576,7 @@ int main(int argc, char** argv) {
         **/
 
         Particle_Array particles = {NULL, 0};
-        create_random_particles(&particles,10*3);
+        create_random_particles(&particles,1*3);
         while(quit == FALSE){
                 input(&quit);
 
