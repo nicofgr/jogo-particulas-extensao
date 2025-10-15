@@ -337,81 +337,59 @@ void update( Particle_Array particles){
         if(delta_time > 0.05) return;
 
         vec2 test;
-        for(int i = 0; i < particles.size; i++){
-                Particle part1 = particles.particle[i];
-                vec2 force = {0.0f, 0.0f};
+        if(particles.size % 3 != 0) exit(1); // Nucleons need 3 quarks
+        for(int i = 0; i < particles.size/3; i++){
+                vec2 force[] = {{0.0f, 0.0f}, {0.0f, 0.0f}, {0.0f, 0.0f}};
 
                 // UPDATE FORCES
-                // Search for two closest particles
-                int closest1 = i;
-                int closest2 = i;
-                float dist2_particle1;
-                float dist2_particle2;
-                for(int j = 0; j < particles.size; j++){
-                        if(i == j) continue;
-                        if(closest1 == i){
-                                closest1 = j;
-                                dist2_particle1 = glm_vec2_distance2(part1.position, particles.particle[closest1].position);
-                                continue;
-                        }
-                        if(closest2 == i && closest1 != j){
-                                closest2 = j;
-                                dist2_particle2 = glm_vec2_distance2(part1.position, particles.particle[closest2].position);
-                                if(dist2_particle2 < dist2_particle1){
-                                        float temp = dist2_particle2;
-                                        dist2_particle1 = dist2_particle2;
-                                        dist2_particle2 = temp;
-                                }
-                                continue;
-                        }
-                        Particle part2 = particles.particle[j];
-                        float dist_squared = glm_vec2_distance2(part1.position, part2.position);
-                        if(dist_squared < dist2_particle1){
-                                closest2 = closest1;
-                                closest1 = j;
-                                dist2_particle2 = dist2_particle1;
-                                dist2_particle1 = dist_squared;
-                        }
-                }
+                Particle part[3];
+                part[0] = particles.particle[i*3];
+                part[1] = particles.particle[i*3 + 1];
+                part[2] = particles.particle[i*3 + 2];
 
-                Particle part[2];
-                part[0] = particles.particle[closest1];
-                part[1] = particles.particle[closest2];
-
-                for(int i = 0; i < 2; i++){
+                for(int j = 0; j < 3; j++){
                         vec2 forceDir;
-                        glm_vec2_sub(part1.position, part[i].position, forceDir);
+                        int k = (j+1) % 3;
+                        printf("%d %d\n", j, k);
+                        glm_vec2_sub(part[j].position, part[k].position, forceDir);
                         glm_vec2_norm(forceDir);
 
-                        float dist_squared = glm_vec2_distance2(part1.position, part[i].position);
-                        float min_dist = 0.1;
+                        float dist_squared = glm_vec2_distance2(part[j].position, part[k].position);
+                        float min_dist = 0.05;
                         float max_dist = 1.0;
                         if(dist_squared <= pow(min_dist,2)) continue;
-                        float dist = glm_vec2_distance(part1.position, part[i].position);
+                        float dist = glm_vec2_distance(part[j].position, part[k].position);
                         float forceMag = -(dist - min_dist);
 
                         glm_vec2_scale(forceDir, forceMag, forceDir);
-                        glm_vec2_add(force, forceDir, force);
-                                
+                        glm_vec2_add(force[j], forceDir, force[j]);
+                        glm_vec2_sub(force[k], forceDir, force[k]);
                 }
-                vec2 drag = {0.0f, 0.0f};
-                glm_vec2_copy(part1.velocity, drag);
-                glm_vec2_negate(drag);
-                glm_vec2_scale(drag, 0.5, drag);
-                glm_vec2_add(force, drag, force);
+                puts("");
 
-                // UPDATE VELOCITIES
-                glm_vec2_scale(force, delta_time, force);
-                glm_vec2_add(part1.velocity, force, part1.velocity); 
+                for(int j = 0; j < 3; j++){
+                        // Drag
+                        vec2 drag = {0.0f, 0.0f};
+                        glm_vec2_copy(part[j].velocity, drag);
+                        glm_vec2_negate(drag);
+                        glm_vec2_scale(drag, 0.1, drag);
+                        glm_vec2_add(force[j], drag, force[j]);
 
-                // Max Velocity
-                float max_vel = 1;
-                float mag_squared = glm_vec2_norm2(part1.velocity);
-                if(mag_squared > pow(max_vel,2)){
-                        glm_vec2_normalize(part1.velocity);
-                        glm_vec2_scale(part1.velocity, max_vel, part1.velocity);
+                        // UPDATE VELOCITIES
+                        glm_vec2_scale(force[j], delta_time, force[j]);
+                        glm_vec2_add(part[j].velocity, force[j], part[j].velocity); 
+
+                        // Max Velocity
+                        float max_vel = 1;
+                        float mag_squared = glm_vec2_norm2(part[j].velocity);
+                        if(mag_squared > pow(max_vel,2)){
+                                glm_vec2_normalize(part[j].velocity);
+                                glm_vec2_scale(part[j].velocity, max_vel, part[j].velocity);
+                        }
                 }
-                particles.particle[i] = part1;
+                particles.particle[i*3]     = part[0];
+                particles.particle[i*3 + 1] = part[1];
+                particles.particle[i*3 + 2] = part[2];
         }
 
         for(int i = 0; i < particles.size; i++){
@@ -495,7 +473,7 @@ int main(int argc, char** argv) {
         **/
 
         Particle_Array particles = {NULL, 0};
-        create_random_particles(&particles,20*3);
+        create_random_particles(&particles,10*3);
         while(quit == FALSE){
                 input(&quit);
 
