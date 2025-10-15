@@ -342,28 +342,54 @@ void update( Particle_Array particles){
                 vec2 force = {0.0f, 0.0f};
 
                 // UPDATE FORCES
+                // Search for two closest particles
+                int closest1 = i;
+                int closest2 = i;
+                float dist2_particle1;
+                float dist2_particle2;
                 for(int j = 0; j < particles.size; j++){
                         if(i == j) continue;
+                        if(closest1 == i){
+                                closest1 = j;
+                                dist2_particle1 = glm_vec2_distance2(part1.position, particles.particle[closest1].position);
+                                continue;
+                        }
+                        if(closest2 == i && closest1 != j){
+                                closest2 = j;
+                                dist2_particle2 = glm_vec2_distance2(part1.position, particles.particle[closest2].position);
+                                if(dist2_particle2 < dist2_particle1){
+                                        float temp = dist2_particle2;
+                                        dist2_particle1 = dist2_particle2;
+                                        dist2_particle2 = temp;
+                                }
+                                continue;
+                        }
                         Particle part2 = particles.particle[j];
+                        float dist_squared = glm_vec2_distance2(part1.position, part2.position);
+                        if(dist_squared < dist2_particle1){
+                                closest2 = closest1;
+                                closest1 = j;
+                                dist2_particle2 = dist2_particle1;
+                                dist2_particle1 = dist_squared;
+                        }
+                }
+
+                Particle part[2];
+                part[0] = particles.particle[closest1];
+                part[1] = particles.particle[closest2];
+
+                for(int i = 0; i < 2; i++){
                         vec2 forceDir;
-                        glm_vec2_sub(part1.position, part2.position, forceDir);
+                        glm_vec2_sub(part1.position, part[i].position, forceDir);
                         glm_vec2_norm(forceDir);
 
-                        float dist_squared = glm_vec2_distance2(part1.position, part2.position);
+                        float dist_squared = glm_vec2_distance2(part1.position, part[i].position);
                         float min_dist = 0.1;
                         float max_dist = 1.0;
                         if(dist_squared <= pow(min_dist,2)) continue;
-                        float dist = glm_vec2_distance(part1.position, part2.position);
+                        float dist = glm_vec2_distance(part1.position, part[i].position);
                         float forceMag = -(dist - min_dist);
-                        /**
-                        if(dist_squared <= 0) continue;
-                        float maxForce = 10.0; // <<
-                        float minDist = 0.1;
-                        float forceMag = - (maxForce*minDist*minDist)/dist_squared;
-                        if(dist_squared < minDist*minDist){
-                                forceMag = -forceMag + 2*maxForce ;
-                        }
-                        **/
+
                         glm_vec2_scale(forceDir, forceMag, forceDir);
                         glm_vec2_add(force, forceDir, force);
                                 
@@ -371,7 +397,7 @@ void update( Particle_Array particles){
                 vec2 drag = {0.0f, 0.0f};
                 glm_vec2_copy(part1.velocity, drag);
                 glm_vec2_negate(drag);
-                glm_vec2_scale(drag, 0.01, drag);
+                glm_vec2_scale(drag, 0.5, drag);
                 glm_vec2_add(force, drag, force);
 
                 // UPDATE VELOCITIES
@@ -469,7 +495,7 @@ int main(int argc, char** argv) {
         **/
 
         Particle_Array particles = {NULL, 0};
-        create_random_particles(&particles,3*3);
+        create_random_particles(&particles,20*3);
         while(quit == FALSE){
                 input(&quit);
 
