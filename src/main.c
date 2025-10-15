@@ -186,6 +186,7 @@ void draw_particle(const Particle particle, int ID){
 }
 
 void init() {
+        srand(SDL_GetTicks());
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         //glEnable(GL_PROGRAM_POINT_SIZE);
         //glEnable(GL_MULTISAMPLE);
@@ -315,11 +316,11 @@ void particle_array_push(Particle_Array* array, Particle particle){
 void create_random_particles(Particle_Array* array, const unsigned int quantity){
         for(int i = 0; i < quantity; i++){
                 Particle particle;
-                particle.position[0] = ((rand() % 98)-49)/55.0f;
-                particle.position[1] = ((rand() % 98)-49)/55.0f;
+                particle.position[0] = ((rand() % 98)-49)/50.0f;
+                particle.position[1] = ((rand() % 98)-49)/50.0f;
                 particle.color = red_color;
-                particle.velocity[0] = 0.0f;
-                particle.velocity[1] = 0.0f;
+                particle.velocity[0] = ((rand() % 100)-50)/50.0f;
+                particle.velocity[1] = ((rand() % 100)-50)/50.0f;
                 particle_array_push(array, particle);
         }
 }
@@ -349,25 +350,29 @@ void update( Particle_Array particles){
                         glm_vec2_norm(forceDir);
 
                         float dist_squared = glm_vec2_distance2(part1.position, part2.position);
+                        float min_dist = 0.1;
+                        float max_dist = 1.0;
+                        if(dist_squared <= pow(min_dist,2)) continue;
+                        float dist = glm_vec2_distance(part1.position, part2.position);
+                        float forceMag = -(dist - min_dist);
+                        /**
                         if(dist_squared <= 0) continue;
-                        float maxForce = 1.0; // <<
-                        maxForce = 100.0;
-                        float minDist = 0.2;
+                        float maxForce = 10.0; // <<
+                        float minDist = 0.1;
                         float forceMag = - (maxForce*minDist*minDist)/dist_squared;
                         if(dist_squared < minDist*minDist){
                                 forceMag = -forceMag + 2*maxForce ;
                         }
+                        **/
                         glm_vec2_scale(forceDir, forceMag, forceDir);
                         glm_vec2_add(force, forceDir, force);
                                 
                 }
-                /**
                 vec2 drag = {0.0f, 0.0f};
                 glm_vec2_copy(part1.velocity, drag);
                 glm_vec2_negate(drag);
-                glm_vec2_scale(drag, 0.5, drag);
+                glm_vec2_scale(drag, 0.01, drag);
                 glm_vec2_add(force, drag, force);
-                **/
 
                 // UPDATE VELOCITIES
                 glm_vec2_scale(force, delta_time, force);
@@ -381,7 +386,10 @@ void update( Particle_Array particles){
                         glm_vec2_scale(part1.velocity, max_vel, part1.velocity);
                 }
                 particles.particle[i] = part1;
+        }
 
+        for(int i = 0; i < particles.size; i++){
+                Particle part1 = particles.particle[i];
                 // UPDATE POSITIONS
                 particles.particle[i].position[0] += particles.particle[i].velocity[0]*delta_time;
                 particles.particle[i].position[1] += particles.particle[i].velocity[1]*delta_time;
@@ -393,15 +401,7 @@ void update( Particle_Array particles){
                 if(particles.particle[i].position[0] < -1 && velocity[0] < 0) particles.particle[i].velocity[0] *= -1;
                 if(particles.particle[i].position[1] > 1 && velocity[1] > 0) particles.particle[i].velocity[1] *= -1;
                 if(particles.particle[i].position[1] < -1 && velocity[1] < 0) particles.particle[i].velocity[1] *= -1;
-                glm_vec2_copy(force, test);
         }
-        Particle part = particles.particle[0];
-        /**
-        printf("%.2f\n", delta_time);
-        printf("%.2f, %.2f\n", part.position[0], part.position[1]);
-        printf("%.2f, %.2f\n", part.velocity[0], part.velocity[1]);
-        printf("%.2f, %.2f\n\n", test[0], test[1]);
-        **/
 }
 
 typedef struct{
@@ -469,7 +469,7 @@ int main(int argc, char** argv) {
         **/
 
         Particle_Array particles = {NULL, 0};
-        create_random_particles(&particles,200);
+        create_random_particles(&particles,3*3);
         while(quit == FALSE){
                 input(&quit);
 
