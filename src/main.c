@@ -42,7 +42,7 @@
 #define SCREEN_HEIGHT  600
 #define TRUE  1
 #define FALSE 0
-#define TARGET_FPS 90
+#define TARGET_FPS 60
 #define FRAME_TARGET_TIME 1000/TARGET_FPS
 #define FOV 70
 
@@ -82,8 +82,8 @@ const char *fragmentShaderSource = "#version 100\n"
 "   float radius = 0.35;\n"
 "   float dist = length(pos);\n"
 "   float alpha = 1.0 - smoothstep(radius-0.3, radius, dist);\n"
-"   float frequency = 2.0*M_PI*dist;\n"
-"   alpha *= (sin(frequency*8.0 - time*20.0 + float(identifier)*2.718)-1.0)/13.33 + 1.0;\n"
+"   float frequency = 2.0*M_PI*dist*8.0 - 2.0*M_PI*time;\n"
+"   alpha *= (sin(frequency + float(identifier)*2.718)-1.0)/13.33 + 1.0;\n"
 "   gl_FragColor = vec4(ourColor.xyz*alpha, alpha);\n"
 "}\0";
 
@@ -333,6 +333,9 @@ void update( Particle_Array particles){
         float delta_time = (SDL_GetTicks() - last_frame_time) / 1000.0f;
         last_frame_time = SDL_GetTicks();
 
+        if(delta_time > 0.05) return;
+
+        vec2 test;
         for(int i = 0; i < particles.size; i++){
                 Particle part1 = particles.particle[i];
                 vec2 force = {0.0f, 0.0f};
@@ -346,30 +349,40 @@ void update( Particle_Array particles){
                         glm_vec2_norm(forceDir);
 
                         float dist_squared = glm_vec2_distance2(part1.position, part2.position);
+                        if(dist_squared <= 0) continue;
                         float maxForce = 1.0; // <<
-                        float minDist = 0.1;
+                        maxForce = 100.0;
+                        float minDist = 0.2;
                         float forceMag = - (maxForce*minDist*minDist)/dist_squared;
                         if(dist_squared < minDist*minDist){
                                 forceMag = -forceMag + 2*maxForce ;
                         }
-
                         glm_vec2_scale(forceDir, forceMag, forceDir);
                         glm_vec2_add(force, forceDir, force);
-
+                                
                 }
+                /**
                 vec2 drag = {0.0f, 0.0f};
                 glm_vec2_copy(part1.velocity, drag);
                 glm_vec2_negate(drag);
                 glm_vec2_scale(drag, 0.5, drag);
                 glm_vec2_add(force, drag, force);
+                **/
 
                 // UPDATE VELOCITIES
                 glm_vec2_scale(force, delta_time, force);
                 glm_vec2_add(part1.velocity, force, part1.velocity); 
+
+                // Max Velocity
+                float max_vel = 1;
+                float mag_squared = glm_vec2_norm2(part1.velocity);
+                if(mag_squared > pow(max_vel,2)){
+                        glm_vec2_normalize(part1.velocity);
+                        glm_vec2_scale(part1.velocity, max_vel, part1.velocity);
+                }
                 particles.particle[i] = part1;
 
                 // UPDATE POSITIONS
-                if(delta_time > 1.0) return;
                 particles.particle[i].position[0] += particles.particle[i].velocity[0]*delta_time;
                 particles.particle[i].position[1] += particles.particle[i].velocity[1]*delta_time;
 
@@ -380,7 +393,15 @@ void update( Particle_Array particles){
                 if(particles.particle[i].position[0] < -1 && velocity[0] < 0) particles.particle[i].velocity[0] *= -1;
                 if(particles.particle[i].position[1] > 1 && velocity[1] > 0) particles.particle[i].velocity[1] *= -1;
                 if(particles.particle[i].position[1] < -1 && velocity[1] < 0) particles.particle[i].velocity[1] *= -1;
+                glm_vec2_copy(force, test);
         }
+        Particle part = particles.particle[0];
+        /**
+        printf("%.2f\n", delta_time);
+        printf("%.2f, %.2f\n", part.position[0], part.position[1]);
+        printf("%.2f, %.2f\n", part.velocity[0], part.velocity[1]);
+        printf("%.2f, %.2f\n\n", test[0], test[1]);
+        **/
 }
 
 typedef struct{
@@ -448,7 +469,7 @@ int main(int argc, char** argv) {
         **/
 
         Particle_Array particles = {NULL, 0};
-        create_random_particles(&particles,10);
+        create_random_particles(&particles,200);
         while(quit == FALSE){
                 input(&quit);
 
