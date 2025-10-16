@@ -46,6 +46,8 @@
 #define FRAME_TARGET_TIME 1000/TARGET_FPS
 #define FOV 70
 #define SPEED_OF_C 1
+#define FORCE_MULTIPLIER 42
+#define SPEED_MULTIPLIER 1
 
 typedef enum {
         QUARK_UP,
@@ -140,6 +142,7 @@ typedef struct{
 typedef struct{
         Particle* particle;
         unsigned int size;
+        unsigned int capacity;
 }Particle_Array;
 
 vec3 camera_pos   = {0.0f, 0.0f,  7.0f};
@@ -247,6 +250,7 @@ void draw_particle(const Particle particle, int ID){
 
 Particle_Array photons = {NULL, 0};
 Particle_Array mesons  = {NULL, 0};
+Particle_Array baryons = {NULL, 0};
 
 void init() {
         srand(SDL_GetTicks());
@@ -360,13 +364,17 @@ void input(int * quit){
 }
 
 void particle_array_push(Particle_Array* array, Particle particle){
-        if( array->size == 0){
+        if( array->capacity == 0){
                 array->particle = (Particle*)malloc(sizeof(Particle));
                 array->particle[0] = particle;
                 array->size++;
+                array->capacity++;
                 return;
         }
-        array->particle = (Particle*)realloc(array->particle, sizeof(Particle)*(array->size+1));
+        if( array->size == array->capacity ){
+                array->particle = (Particle*)realloc(array->particle, sizeof(Particle)*(array->size+1));
+                array->capacity++;
+        }
         array->particle[array->size] = particle;
         array->size++;
         return;
@@ -397,6 +405,35 @@ void spawn_meson(vec2 position1, vec2 velocity1, vec2 position2, vec2 velocity2)
         spawn_particle(&mesons, QUARK_UP, 0, position1, velocity1);
         spawn_particle(&mesons, QUARK_UP, 1, position2, velocity2);
 }
+
+void remove_meson(const unsigned int ID){
+        if(ID*2 >= mesons.size){
+                printf("ERROR: Meson ID greater than size\n");
+                exit(1);
+        }
+        if(ID == (mesons.size/2) - 1){
+                mesons.size -= 2;
+                return;
+        }
+        mesons.particle[ID*2]     = mesons.particle[mesons.size-2];
+        mesons.particle[(ID*2)+1] = mesons.particle[mesons.size-1];
+        mesons.size -= 2;
+        return;
+}
+
+void spawn_baryon(){
+        for(int i = 0; i < 3; i++){
+                float positionX = ((rand() % 98)-49)/50.0f;
+                float positionY = ((rand() % 98)-49)/50.0f;
+                float velX = ((rand() % 98)-49)/50.0f;
+                float velY = ((rand() % 98)-49)/50.0f;
+                spawn_particle(&baryons, QUARK_UP, FALSE, (vec2){positionX, positionY}, (vec2){velX,velY});
+        }
+}
+
+void spawn_photon(vec2 position, vec2 velocity){
+        spawn_particle(&photons, PHOTON, FALSE, position, velocity);
+}
 // When destroying copy the last place to here and pop it
 
 void check_boundaries(Particle_Array particles){
@@ -425,52 +462,44 @@ void update_photons(float delta_time){
         check_boundaries(photons);
 }
 
-void update( Particle_Array particles){
-
-        int wait_time = FRAME_TARGET_TIME - (SDL_GetTicks() - last_frame_time);
-        if(wait_time > 0 && wait_time <= FRAME_TARGET_TIME)
-                SDL_Delay(wait_time);
-
-        float delta_time = (SDL_GetTicks() - last_frame_time) / 1000.0f;
-        last_frame_time = SDL_GetTicks();
-
-        float currentTime = SDL_GetTicks();
-        if(currentTime - lastTime >= 1*1000.0f){
-                lastTime = currentTime;
-                //spawn_particle(&photons, PHOTON, 0, (vec2){0.0f,0.0f}, (vec2){10.0f,10.0f});
-        }
-
-        if(delta_time > 0.05) return;
-
-        update_photons(delta_time);
-
+void update_baryons(float delta_time){
         // UPDATE FORCES
         // Strong force between 3 quarks
-        if(particles.size % 3 != 0) exit(1); // Nucleons need 3 quarks
-        for(int i = 0; i < particles.size/3; i++){
+        if(baryons.size % 3 != 0) exit(1); // Baryons need 3 quarks
+        for(int i = 0; i < baryons.size/3; i++){
                 vec2 force[] = {{0.0f, 0.0f}, {0.0f, 0.0f}, {0.0f, 0.0f}};
 
                 Particle part[3];
-                part[0] = particles.particle[i*3];
-                part[1] = particles.particle[i*3 + 1];
-                part[2] = particles.particle[i*3 + 2];
+                part[0] = baryons.particle[i*3];
+                part[1] = baryons.particle[i*3 + 1];
+                part[2] = baryons.particle[i*3 + 2];
 
+                float mid_x = (part[0].position[0] + part[1].position[0] + part[2].position[0])/3;
+                float mid_y = (part[0].position[1] + part[1].position[1] + part[2].position[1])/3;
+                vec2 middle = {mid_x, mid_y};
+
+                // Maybe change this force? Direction is the middle and sometimes only one particle feel
                 for(int j = 0; j < 3; j++){
                         vec2 forceDir;
-                        int k = (j+1) % 3;
-                        glm_vec2_sub(part[j].position, part[k].position, forceDir);
+                        glm_vec2_sub(part[j].position, middle, forceDir);
                         glm_vec2_norm(forceDir);
 
-                        float dist_squared = glm_vec2_distance2(part[j].position, part[k].position);
+                        float dist_squared = glm_vec2_distance2(part[j].position, middle);
                         float min_dist = 0.05;
                         float max_dist = 1.0;
                         if(dist_squared <= pow(min_dist,2)) continue;
-                        float dist = glm_vec2_distance(part[j].position, part[k].position);
-                        float forceMag = -(dist - min_dist);
+                        if(dist_squared > pow(max_dist,2)){
+                                vec2 middle_middle;
+                                glm_vec2_add(middle, part[j].position, middle_middle);
+                                glm_vec2_scale(middle_middle, 0.5, middle_middle);
+                                spawn_meson(part[j].position, part[j].velocity, middle_middle, part[j].velocity);
+                                glm_vec2_copy(middle_middle, part[j].position);
+                                // Update velocity too 
+                        }
+                        float forceMag = -FORCE_MULTIPLIER;
 
                         glm_vec2_scale(forceDir, forceMag, forceDir);
                         glm_vec2_add(force[j], forceDir, force[j]);
-                        glm_vec2_sub(force[k], forceDir, force[k]);
                 }
 
                 for(int j = 0; j < 3; j++){
@@ -492,20 +521,109 @@ void update( Particle_Array particles){
                                 glm_vec2_scale(part[j].velocity, SPEED_OF_C, part[j].velocity);
                         }
                 }
-                //printf("%.2f %.2f\n", part[0].velocity[0], part[0].velocity[1]);
-                particles.particle[i*3]     = part[0];
-                particles.particle[i*3 + 1] = part[1];
-                particles.particle[i*3 + 2] = part[2];
+                baryons.particle[i*3]     = part[0];
+                baryons.particle[i*3 + 1] = part[1];
+                baryons.particle[i*3 + 2] = part[2];
         }
 
         // UPDATE POSITIONS
-        for(int i = 0; i < particles.size; i++){
-                Particle part1 = particles.particle[i];
-                particles.particle[i].position[0] += particles.particle[i].velocity[0]*delta_time;
-                particles.particle[i].position[1] += particles.particle[i].velocity[1]*delta_time;
+        for(int i = 0; i < baryons.size; i++){
+                Particle part1 = baryons.particle[i];
+                baryons.particle[i].position[0] += baryons.particle[i].velocity[0]*delta_time;
+                baryons.particle[i].position[1] += baryons.particle[i].velocity[1]*delta_time;
         }
         // BOUNDARIES
-        check_boundaries(particles);
+        check_boundaries(baryons);
+}
+
+void update_mesons(float delta_time){
+        vec2 force[] = {{0.0f, 0.0f}, {0.0f, 0.0f}};
+
+        if(mesons.size % 2 != 0) exit(1); // Mesons need 2 quarks
+        for(int i = 0; i < mesons.size/2; i++){
+                Particle part[2];
+                part[0] = mesons.particle[i*2];
+                part[1] = mesons.particle[i*2 + 1];
+
+                vec2 forceDir;
+                glm_vec2_sub(part[0].position, part[1].position, forceDir);
+                glm_vec2_norm(forceDir);
+
+                float dist_squared = glm_vec2_distance2(part[0].position, part[1].position);
+                float min_dist = 0.05;
+                if(dist_squared <= pow(min_dist,2)){
+                        vec2 new_vel = {part[0].velocity[1], -part[0].velocity[0]};
+                        vec2 new_vel2 = {-part[0].velocity[1], part[0].velocity[0]};
+                        spawn_photon(part[0].position, new_vel);
+                        spawn_photon(part[0].position, new_vel2);
+                        remove_meson(i);
+                }
+                float forceMag = -FORCE_MULTIPLIER;
+
+                glm_vec2_scale(forceDir, forceMag, forceDir);
+                glm_vec2_add(force[0], forceDir, force[0]);
+                glm_vec2_sub(force[1], forceDir, force[1]);
+
+                for(int j = 0; j < 2; j++){
+                        // Drag
+                        vec2 drag = {0.0f, 0.0f};
+                        glm_vec2_copy(part[j].velocity, drag);
+                        glm_vec2_negate(drag);
+                        glm_vec2_scale(drag, 0.1, drag);
+                        glm_vec2_add(force[j], drag, force[j]);
+
+                        // UPDATE VELOCITIES
+                        glm_vec2_scale(force[j], delta_time, force[j]);
+                        glm_vec2_add(part[j].velocity, force[j], part[j].velocity); 
+
+                        // Max Velocity
+                        float mag_squared = glm_vec2_norm2(part[j].velocity);
+                        if(mag_squared > pow(SPEED_OF_C,2)){
+                                glm_vec2_normalize(part[j].velocity);
+                                glm_vec2_scale(part[j].velocity, SPEED_OF_C, part[j].velocity);
+                        }
+                }
+                mesons.particle[i*2]     = part[0];
+                mesons.particle[i*2 + 1] = part[1];
+        }
+
+        // UPDATE POSITIONS
+        for(int i = 0; i < mesons.size; i++){
+                Particle part1 = mesons.particle[i];
+                mesons.particle[i].position[0] += mesons.particle[i].velocity[0]*delta_time;
+                mesons.particle[i].position[1] += mesons.particle[i].velocity[1]*delta_time;
+        }
+        // BOUNDARIES
+        check_boundaries(mesons);
+}
+
+void update(){
+
+        int wait_time = FRAME_TARGET_TIME - (SDL_GetTicks() - last_frame_time);
+        if(wait_time > 0 && wait_time <= FRAME_TARGET_TIME)
+                SDL_Delay(wait_time);
+
+        float delta_time = (SDL_GetTicks() - last_frame_time) / 1000.0f;
+        last_frame_time = SDL_GetTicks();
+
+        float currentTime = SDL_GetTicks();
+        if(currentTime - lastTime >= 1*1000.0f){
+                lastTime = currentTime;
+                float v1 = ((rand() % 98)-49)/50.0f;
+                float v2 = ((rand() % 98)-49)/50.0f;
+                float p1 = ((rand() % 98)-49)/50.0f;
+                float p2 = ((rand() % 98)-49)/50.0f;
+                //spawn_meson((vec2){p1,p2}, (vec2){v1,v2}, (vec2){v1,v2}, (vec2){p1,p2});
+                //spawn_baryon();
+                //spawn_particle(&photons, PHOTON, 0, (vec2){0.0f,0.0f}, (vec2){10.0f,10.0f});
+        }
+
+        if(delta_time > 0.05) return;
+        delta_time *= 0.1;
+        update_photons(delta_time);
+        update_baryons(delta_time);
+        update_mesons(delta_time);
+
 }
 
 typedef struct{
@@ -514,18 +632,21 @@ typedef struct{
 } String;
 
 
-void draw(const Particle_Array particles){
+void draw(){
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         glEnable(GL_DEPTH_TEST);
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
         glDepthMask(GL_FALSE); // Disable for particles because it shows their triangles
-        for(int i = 0; i < particles.size; i++){
-                draw_particle(particles.particle[i], i);
+        for(int i = 0; i < baryons.size; i++){
+                draw_particle(baryons.particle[i], i);
         }
         for(int i = 0; i < photons.size; i++){
                 draw_particle(photons.particle[i], i);
+        }
+        for(int i = 0; i < mesons.size; i++){
+                draw_particle(mesons.particle[i], i);
         }
         glDepthMask(GL_TRUE);
         SDL_GL_SwapWindow(glWindow);
@@ -575,15 +696,17 @@ int main(int argc, char** argv) {
         nk_sdl_font_stash_end();}
         **/
 
-        Particle_Array particles = {NULL, 0};
-        create_random_particles(&particles,1*3);
+        for(int i = 0; i < 10; i++){
+                spawn_baryon();
+        }
+
         while(quit == FALSE){
                 input(&quit);
 
-                update(particles);
+                update();
                 //nk_end(ctx);
 
-                draw(particles);
+                draw();
                 //nk_sdl_render(NK_ANTI_ALIASING_ON, MAX_VERTEX_BUFFER, MAX_ELEMENT_BUFFER);
         }
         //nk_sdl_shutdown();
