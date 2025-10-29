@@ -47,7 +47,7 @@
 #define FOV 70
 #define SPEED_OF_C 1
 #define FORCE_MULTIPLIER 42
-#define SPEED_MULTIPLIER 1
+//#define SPEED_MULTIPLIER 1
 
 typedef enum {
         QUARK_UP,
@@ -463,9 +463,9 @@ void update_photons(float delta_time){
 }
 
 void update_baryons(float delta_time){
-        // UPDATE FORCES
-        // Strong force between 3 quarks
         if(baryons.size % 3 != 0) exit(1); // Baryons need 3 quarks
+
+        // Strong force between 3 quarks
         for(int i = 0; i < baryons.size/3; i++){
                 vec2 force[] = {{0.0f, 0.0f}, {0.0f, 0.0f}, {0.0f, 0.0f}};
 
@@ -476,30 +476,36 @@ void update_baryons(float delta_time){
 
                 float mid_x = (part[0].position[0] + part[1].position[0] + part[2].position[0])/3;
                 float mid_y = (part[0].position[1] + part[1].position[1] + part[2].position[1])/3;
-                vec2 middle = {mid_x, mid_y};
+                vec2 middle_point = {mid_x, mid_y};
 
-                // Maybe change this force? Direction is the middle and sometimes only one particle feel
                 for(int j = 0; j < 3; j++){
-                        vec2 forceDir;
-                        glm_vec2_sub(part[j].position, middle, forceDir);
-                        glm_vec2_norm(forceDir);
-
-                        float dist_squared = glm_vec2_distance2(part[j].position, middle);
-                        float min_dist = 0.05;
-                        float max_dist = 1.0;
-                        if(dist_squared <= pow(min_dist,2)) continue;
+                        float dist_squared = glm_vec2_distance2(part[j].position, middle_point);
+                        float max_dist = 0.2;
+                        // Pair creation
                         if(dist_squared > pow(max_dist,2)){
                                 vec2 middle_middle;
-                                glm_vec2_add(middle, part[j].position, middle_middle);
+                                glm_vec2_add(middle_point, part[j].position, middle_middle);
                                 glm_vec2_scale(middle_middle, 0.5, middle_middle);
                                 spawn_meson(part[j].position, part[j].velocity, middle_middle, part[j].velocity);
                                 glm_vec2_copy(middle_middle, part[j].position);
                                 // Update velocity too 
                         }
-                        float forceMag = -FORCE_MULTIPLIER;
+                }
 
-                        glm_vec2_scale(forceDir, forceMag, forceDir);
-                        glm_vec2_add(force[j], forceDir, force[j]);
+                // Attraction forces between quarks 
+                for(int j = 0; j < 3; j++){
+                        for(int k = 0; k < 2; k++){
+                                float dist_squared = glm_vec2_distance2(part[j].position, part[(j+1+k)%3].position);
+                                float min_dist = 0.055;
+                                if(dist_squared <= pow(min_dist,2)) continue;  // Asymptotic freedom
+                                vec2 forceDir[2];
+                                glm_vec2_sub(part[j].position, part[(j+1+k)%3].position, forceDir[k]);
+                                glm_vec2_norm(forceDir[k]);
+
+                                float forceMag = -FORCE_MULTIPLIER;
+                                glm_vec2_scale(forceDir[k], forceMag, forceDir[k]);
+                                glm_vec2_add(force[j], forceDir[k], force[j]);
+                        }
                 }
 
                 for(int j = 0; j < 3; j++){
@@ -537,18 +543,15 @@ void update_baryons(float delta_time){
 }
 
 void update_mesons(float delta_time){
-        vec2 force[] = {{0.0f, 0.0f}, {0.0f, 0.0f}};
-
         if(mesons.size % 2 != 0) exit(1); // Mesons need 2 quarks
+
+        vec2 force[] = {{0.0f, 0.0f}, {0.0f, 0.0f}};
         for(int i = 0; i < mesons.size/2; i++){
                 Particle part[2];
                 part[0] = mesons.particle[i*2];
                 part[1] = mesons.particle[i*2 + 1];
 
-                vec2 forceDir;
-                glm_vec2_sub(part[0].position, part[1].position, forceDir);
-                glm_vec2_norm(forceDir);
-
+                // Meson annihilation
                 float dist_squared = glm_vec2_distance2(part[0].position, part[1].position);
                 float min_dist = 0.05;
                 if(dist_squared <= pow(min_dist,2)){
@@ -557,7 +560,13 @@ void update_mesons(float delta_time){
                         spawn_photon(part[0].position, new_vel);
                         spawn_photon(part[0].position, new_vel2);
                         remove_meson(i);
+                        continue;
                 }
+
+                vec2 forceDir;
+                glm_vec2_sub(part[0].position, part[1].position, forceDir);
+                glm_vec2_norm(forceDir);
+
                 float forceMag = -FORCE_MULTIPLIER;
 
                 glm_vec2_scale(forceDir, forceMag, forceDir);
@@ -619,7 +628,7 @@ void update(){
         }
 
         if(delta_time > 0.05) return;
-        delta_time *= 0.1;
+        delta_time *= 1;
         update_photons(delta_time);
         update_baryons(delta_time);
         update_mesons(delta_time);
